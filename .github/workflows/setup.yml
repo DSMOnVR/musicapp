@@ -1,0 +1,45 @@
+name: Unzip, commit and build
+on:
+  push:
+    paths: ["MusicApp.zip"]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Unzip into repo
+        run: |
+          if [ -f MusicApp.zip ]; then
+            unzip -q -o MusicApp.zip -d /tmp/unz
+            SRC=/tmp/unz
+            [ -d /tmp/unz/MusicApp ] && SRC=/tmp/unz/MusicApp
+            rm -rf "$SRC/.github"
+            cp -R "$SRC/." .
+            rm MusicApp.zip
+          fi
+
+      - name: Commit files
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet || (git commit -m "Add project files" && git push)
+
+      - name: Build unsigned IPA
+        run: |
+          brew install xcodegen && xcodegen generate
+          xcodebuild -project MusicApp.xcodeproj -scheme MusicApp \
+            -configuration Release -sdk iphoneos -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
+          mkdir Payload
+          cp -R build/Build/Products/Release-iphoneos/MusicApp.app Payload/
+          zip -r MusicApp.ipa Payload
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MusicApp-ipa
+          path: MusicApp.ipa
