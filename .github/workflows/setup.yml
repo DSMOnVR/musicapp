@@ -1,15 +1,22 @@
+
 name: Unzip, commit and build
+
 on:
   push:
     paths: ["MusicApp.zip"]
   workflow_dispatch:
+
 permissions:
   contents: write
+
 jobs:
   build:
     runs-on: macos-latest
+
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Unzip into repo
         run: |
@@ -22,19 +29,36 @@ jobs:
             rm MusicApp.zip
           fi
 
-      - name: Commit files
+      - name: Commit and push files
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@users.noreply.github.com"
+
           git add -A
-          git diff --cached --quiet || (git commit -m "Add project files" && git push)
+
+          if ! git diff --cached --quiet; then
+            git commit -m "Add project files"
+
+            git fetch origin main
+            git rebase origin/main
+
+            git push origin HEAD:main
+          fi
 
       - name: Build unsigned IPA
         run: |
-          brew install xcodegen && xcodegen generate
-          xcodebuild -project MusicApp.xcodeproj -scheme MusicApp \
-            -configuration Release -sdk iphoneos -derivedDataPath build \
-            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
+          brew install xcodegen
+          xcodegen generate
+
+          xcodebuild -project MusicApp.xcodeproj \
+            -scheme MusicApp \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
+
           mkdir Payload
           cp -R build/Build/Products/Release-iphoneos/MusicApp.app Payload/
           zip -r MusicApp.ipa Payload
