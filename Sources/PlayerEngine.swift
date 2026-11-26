@@ -19,6 +19,7 @@ final class PlayerEngine {
     @ObservationIgnored private let player = AVPlayer()
     @ObservationIgnored private var timeObserver: Any?
     @ObservationIgnored private var endObserver: NSObjectProtocol?
+    @ObservationIgnored private var sleepTask: Task<Void, Never>?
 
     init() {
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
@@ -57,6 +58,27 @@ final class PlayerEngine {
     }
 
     func togglePlayPause() { isPlaying ? pause() : play() }
+
+    func play(index: Int) {
+        guard queue.indices.contains(index) else { return }
+        load(index: index)
+        play()
+    }
+
+    func setSleepTimer(minutes: Int) {
+        sleepTask?.cancel()
+        sleepTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(minutes * 60))
+            guard !Task.isCancelled else { return }
+            self?.pause()
+            self?.sleepTask = nil
+        }
+    }
+
+    func cancelSleepTimer() {
+        sleepTask?.cancel()
+        sleepTask = nil
+    }
 
     func next() {
         guard let i = currentIndex else { return }

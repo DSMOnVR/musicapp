@@ -20,5 +20,3 @@ targets:
         UILaunchScreen: {}
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
-        NSAppTransportSecurity:
-          NSAllowsArbitraryLoads: true

@@ -1,58 +1,52 @@
 import SwiftUI
 
 struct ThemesView: View {
-    @Environment(ThemeStore.self) private var themes
-    @Environment(PlayerEngine.self) private var engine
-
+    @Environment(AppTheme.self) private var theme
     var body: some View {
-        @Bindable var store = themes
+        @Bindable var theme = theme
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                Text("Themes").font(.system(size: 32, weight: .bold)).padding(.top, 14)
-
+            VStack(alignment: .leading, spacing: 24) {
+                Text("Themes").font(.system(size: 34, weight: .bold))
                 HStack(spacing: 12) {
-                    ArtView(data: engine.currentTrack?.artworkData).frame(width: 44, height: 44)
-                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(engine.currentTrack?.title ?? "Preview song").font(.system(size: 14, weight: .bold)).lineLimit(1)
-                        Text("Preview").font(.caption).foregroundStyle(Theme.muted)
-                    }
-                    Spacer()
-                    Image(systemName: "waveform").foregroundStyle(themes.accent).symbolEffect(.variableColor.iterative)
-                    Image(systemName: "play.fill").foregroundStyle(Theme.bg).frame(width: 44, height: 44)
-                        .background(themes.accent, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                }
-                .padding(8)
-                .background(Theme.card, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(themes.accent, lineWidth: 3))
-
-                LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible())], spacing: 12) {
-                    ForEach(AppTheme.allCases) { t in
-                        Button { store.theme = t } label: {
-                            VStack(alignment: .leading, spacing: 8) {
-                                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                    .fill(LinearGradient(colors: [Theme.bg, t.accent], startPoint: .leading, endPoint: .trailing))
-                                    .frame(height: 50)
-                                Text(t.name).font(.system(size: 15, weight: .bold))
-                            }
-                            .padding(10)
-                            .background(Theme.card, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                                    .strokeBorder(store.theme == t ? t.accent : Color.clear, lineWidth: 3)
-                            )
-                        }
-                        .buttonStyle(.plain)
+                    RoundedRectangle(cornerRadius: 14).fill(LinearGradient(colors: theme.preset.colors, startPoint: .topLeading, endPoint: .bottomTrailing)).frame(width: 58, height: 58)
+                    VStack(alignment: .leading) { Text("Your current look").font(.headline); Text(theme.preset.rawValue).font(.caption).foregroundStyle(Theme.muted) }
+                    Spacer(); Image(systemName: "waveform").foregroundStyle(theme.accent)
+                }.padding(14).background(Theme.card, in: RoundedRectangle(cornerRadius: 20)).overlay(RoundedRectangle(cornerRadius: 20).stroke(theme.accent, lineWidth: 2))
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 14) {
+                    ForEach(AppTheme.Preset.allCases) { preset in
+                        Button { theme.preset = preset } label: {
+                            VStack(alignment: .leading, spacing: 10) {
+                                RoundedRectangle(cornerRadius: 15).fill(LinearGradient(colors: preset.colors, startPoint: .topLeading, endPoint: .bottomTrailing)).frame(height: 76)
+                                HStack { Text(preset.rawValue).font(.headline); Spacer(); if theme.preset == preset { Image(systemName: "checkmark.circle.fill").foregroundStyle(theme.accent) } }
+                            }.padding(12).background(Theme.card, in: RoundedRectangle(cornerRadius: 20))
+                        }.buttonStyle(.plain)
                     }
                 }
+                Toggle("Color from album artwork", isOn: $theme.useArtworkColors).tint(theme.accent)
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Appearance").font(.headline)
+                    Picker("Appearance", selection: $theme.appearance) { Text("Dark").tag("Dark"); Text("Light").tag("Light"); Text("Auto").tag("Auto") }.pickerStyle(.segmented)
+                }
+                Toggle("Reduce motion", isOn: $theme.reduceMotion).tint(theme.accent)
+            }.padding(22)
+        }.foregroundStyle(.white)
+    }
+}
 
-                Toggle("Color from album art", isOn: $store.useArtColor)
-                Toggle("Reduce motion", isOn: $store.reduceMotion)
-            }
-            .font(.system(size: 15, weight: .bold))
-            .tint(themes.accent)
-            .padding(.horizontal, 24)
-            .padding(.bottom, 20)
-        }
+struct MiniPlayer: View {
+    @Environment(PlayerEngine.self) private var engine
+    var open: () -> Void
+    var body: some View {
+        HStack(spacing: 12) {
+            Button(action: open) {
+                HStack(spacing: 10) {
+                    if let track = engine.currentTrack { ArtworkView(track: track).frame(width: 46, height: 46) }
+                    VStack(alignment: .leading, spacing: 3) { Text(engine.currentTrack?.title ?? "Not playing").font(.subheadline.bold()).foregroundStyle(.white).lineLimit(1); Text(engine.currentTrack?.artist ?? "").font(.caption).foregroundStyle(Theme.muted).lineLimit(1) }
+                }
+            }.buttonStyle(.plain)
+            Spacer(minLength: 0)
+            Image(systemName: engine.isPlaying ? "waveform" : "waveform").foregroundStyle(ThemeAccent.color)
+            Button { engine.togglePlayPause() } label: { Image(systemName: engine.isPlaying ? "pause.fill" : "play.fill").font(.title3).foregroundStyle(.white).frame(width: 42, height: 44) }.buttonStyle(.plain)
+        }.padding(9).background(Theme.card, in: Capsule())
     }
 }

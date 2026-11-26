@@ -2,131 +2,103 @@ import SwiftUI
 
 struct NowPlayingView: View {
     @Environment(PlayerEngine.self) private var engine
-    @Environment(ThemeStore.self) private var themes
-    let ns: Namespace.ID
-    @Binding var expanded: Bool
+    @Environment(LibraryStore.self) private var library
+    @Environment(AppTheme.self) private var appTheme
+    @Environment(\.dismiss) private var dismiss
     @State private var scrubTime: Double?
+    @State private var showQueue = false
     @State private var showLyrics = false
-
+    @State private var showSleepTimer = false
     private var shownTime: Double { scrubTime ?? engine.currentTime }
-
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Button { expanded = false } label: {
-                    Image(systemName: "chevron.down").font(.title3.bold()).frame(width: 44, height: 44)
-                }
-                .accessibilityLabel("Close player")
-                Spacer()
-                Text("NOW PLAYING").font(.caption.weight(.bold)).tracking(1.2).foregroundStyle(Theme.muted)
-                Spacer()
-                Color.clear.frame(width: 44, height: 44)
-            }
-            artwork.padding(.top, 26)
+                Button { dismiss() } label: { Image(systemName: "chevron.down").font(.title3.bold()).foregroundStyle(.white).frame(width: 44, height: 44) }
+                Spacer(); Text("NOW PLAYING").font(.caption.bold()).tracking(1.5).foregroundStyle(Theme.muted); Spacer()
+                Menu { Button("Add to queue", systemImage: "text.badge.plus") { }; Button("Sleep timer", systemImage: "moon.zzz") { showSleepTimer = true } } label: { Image(systemName: "ellipsis").font(.title3.bold()).foregroundStyle(.white).frame(width: 44, height: 44) }
+            }.padding(.top, 8)
+            Spacer(minLength: 18)
+            artwork
+                .padding(.horizontal, 12)
+                .frame(maxHeight: 350)
             titleRow.padding(.top, 34)
-            scrubber.padding(.top, 18)
-            controls.padding(.top, 10)
-            Spacer()
-            Button { showLyrics = true } label: {
-                Text("Lyrics").font(.system(size: 14, weight: .bold))
-                    .padding(.horizontal, 22).frame(height: 44)
-                    .background(Theme.card, in: Capsule())
-            }
+            scrubber.padding(.top, 22)
+            controls.padding(.top, 18)
+            HStack(spacing: 12) {
+                Button { showLyrics = true } label: { Label("Lyrics", systemImage: "quote.bubble").font(.subheadline.bold()) }
+                Button { showQueue = true } label: { Label("Queue", systemImage: "list.number").font(.subheadline.bold()) }
+                Button { showSleepTimer = true } label: { Label("Sleep timer", systemImage: "moon.zzz").font(.subheadline.bold()) }
+            }.buttonStyle(.plain).foregroundStyle(.white).padding(.top, 28)
+            Spacer(minLength: 18)
         }
-        .padding(.horizontal, 24)
-        .padding(.bottom, 12)
-        .foregroundStyle(.white)
-        .background(Theme.bg.ignoresSafeArea())
-        .sheet(isPresented: $showLyrics) {
-            LyricsView().presentationBackground(Theme.bg)
+        .padding(.horizontal, 24).foregroundStyle(.white).background(Theme.bg.ignoresSafeArea())
+        .sheet(isPresented: $showQueue) { QueueSheet().environment(engine) }
+        .sheet(isPresented: $showLyrics) { LyricsSheet().environment(engine) }
+        .confirmationDialog("Sleep timer", isPresented: $showSleepTimer, titleVisibility: .visible) {
+            Button("15 minutes") { engine.setSleepTimer(minutes: 15) }
+            Button("30 minutes") { engine.setSleepTimer(minutes: 30) }
+            Button("45 minutes") { engine.setSleepTimer(minutes: 45) }
+            Button("60 minutes") { engine.setSleepTimer(minutes: 60) }
+            Button("Cancel timer", role: .destructive) { engine.cancelSleepTimer() }
         }
     }
-
     private var artwork: some View {
-        ArtView(data: engine.currentTrack?.artworkData)
-            .aspectRatio(1, contentMode: .fit)
-            .frame(maxWidth: 322)
-            .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
-            .matchedGeometryEffect(id: "art", in: ns)
-            .background(
-                RoundedRectangle(cornerRadius: 32, style: .continuous)
-                    .fill(themes.accent).offset(x: 10, y: 10)
-            )
-            .scaleEffect(engine.isPlaying ? 1 : 0.88)
-            .animation(themes.motion, value: engine.isPlaying)
+        ArtworkView(track: engine.currentTrack ?? Track(title: "Your music", artist: "Offline player", album: "", url: URL(fileURLWithPath: "/"), duration: 0, artworkData: nil))
+            .aspectRatio(1, contentMode: .fit).clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
+            .background(RoundedRectangle(cornerRadius: 30).fill(appTheme.accent).offset(x: 9, y: 9))
     }
-
     private var titleRow: some View {
         HStack {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(engine.currentTrack?.title ?? "Nothing playing")
-                    .font(.system(size: 30, weight: .bold)).lineLimit(1)
-                Text(engine.currentTrack?.artist ?? "")
-                    .font(.system(size: 16)).foregroundStyle(Theme.muted)
+            VStack(alignment: .leading, spacing: 5) {
+                Text(engine.currentTrack?.title ?? "Nothing playing").font(.system(size: 29, weight: .bold)).lineLimit(1)
+                Text(engine.currentTrack?.artist ?? "Import songs to get started").font(.system(size: 16)).foregroundStyle(Theme.muted)
             }
             Spacer()
+            if let track = engine.currentTrack {
+                Button { library.toggleLiked(track) } label: { Image(systemName: library.isLiked(track) ? "heart.fill" : "heart").font(.title2).foregroundStyle(library.isLiked(track) ? appTheme.accent : .white) }
+            }
         }
     }
-
     private var scrubber: some View {
         VStack(spacing: 6) {
             GeometryReader { geo in
                 let progress = engine.duration > 0 ? min(max(shownTime / engine.duration, 0), 1) : 0
-                ZStack(alignment: .leading) {
-                    Capsule().fill(Color.white.opacity(0.15))
-                    Capsule().fill(themes.accent).frame(width: geo.size.width * progress)
-                }
-                .frame(height: 10)
-                .frame(maxHeight: .infinity)
-                .contentShape(Rectangle())
-                .gesture(
-                    DragGesture(minimumDistance: 0)
-                        .onChanged { v in
-                            scrubTime = min(max(v.location.x / geo.size.width, 0), 1) * engine.duration
-                        }
-                        .onEnded { _ in
-                            if let t = scrubTime { engine.seek(to: t) }
-                            scrubTime = nil
-                        }
-                )
-            }
-            .frame(height: 28)
-            HStack {
-                Text(format(shownTime))
-                Spacer()
-                Text("-" + format(max(engine.duration - shownTime, 0)))
-            }
-            .font(.caption).foregroundStyle(Theme.muted)
+                ZStack(alignment: .leading) { Capsule().fill(Color.white.opacity(0.15)); Capsule().fill(appTheme.accent).frame(width: geo.size.width * progress) }
+                    .frame(height: 8).frame(maxHeight: .infinity).contentShape(Rectangle())
+                    .gesture(DragGesture(minimumDistance: 0).onChanged { v in scrubTime = min(max(v.location.x / geo.size.width, 0), 1) * engine.duration }.onEnded { _ in if let t = scrubTime { engine.seek(to: t) }; scrubTime = nil })
+            }.frame(height: 24)
+            HStack { Text(format(shownTime)); Spacer(); Text("-" + format(max(engine.duration - shownTime, 0))) }.font(.caption).foregroundStyle(Theme.muted)
         }
     }
-
     private var controls: some View {
         HStack {
-            Button { engine.previous() } label: {
-                Image(systemName: "backward.fill").font(.system(size: 30)).frame(width: 56, height: 56)
-            }
-            .accessibilityLabel("Previous song")
+            Button { engine.previous() } label: { Image(systemName: "backward.end.fill").font(.title2).frame(width: 56, height: 56) }
             Spacer()
-            Button { engine.togglePlayPause() } label: {
-                Image(systemName: engine.isPlaying ? "pause.fill" : "play.fill")
-                    .font(.system(size: 36)).foregroundStyle(Theme.bg)
-                    .frame(width: 84, height: 84)
-                    .background(themes.accent, in: RoundedRectangle(cornerRadius: 30, style: .continuous))
-                    .contentTransition(.symbolEffect(.replace))
-            }
-            .accessibilityLabel(engine.isPlaying ? "Pause" : "Play")
+            Button { engine.togglePlayPause() } label: { Image(systemName: engine.isPlaying ? "pause.fill" : "play.fill").font(.system(size: 31, weight: .bold)).foregroundStyle(.black).frame(width: 82, height: 82).background(appTheme.accent, in: RoundedRectangle(cornerRadius: 28, style: .continuous)) }
             Spacer()
-            Button { engine.next() } label: {
-                Image(systemName: "forward.fill").font(.system(size: 30)).frame(width: 56, height: 56)
-            }
-            .accessibilityLabel("Next song")
-        }
-        .padding(.horizontal, 18)
-        .buttonStyle(.plain)
+            Button { engine.next() } label: { Image(systemName: "forward.end.fill").font(.title2).frame(width: 56, height: 56) }
+        }.buttonStyle(.plain).padding(.horizontal, 18)
     }
+    private func format(_ t: TimeInterval) -> String { let s = Int(max(t, 0)); return String(format: "%d:%02d", s / 60, s % 60) }
+}
 
-    private func format(_ t: TimeInterval) -> String {
-        let s = Int(max(t, 0))
-        return String(format: "%d:%02d", s / 60, s % 60)
+struct QueueSheet: View {
+    @Environment(PlayerEngine.self) private var engine
+    var body: some View {
+        NavigationStack { List { ForEach(engine.queue.indices, id: \.self) { index in let track = engine.queue[index]; Button { engine.play(index: index) } label: { HStack { VStack(alignment: .leading) { Text(track.title); Text(track.artist).font(.caption).foregroundStyle(.secondary) }; Spacer(); if index == engine.currentIndex { Image(systemName: "waveform").foregroundStyle(ThemeAccent.color) } } } } }.navigationTitle("Up Next").toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { } } } }
+        .presentationDetents([.medium, .large])
+    }
+}
+
+struct LyricsSheet: View {
+    @Environment(PlayerEngine.self) private var engine
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack { Text(engine.currentTrack?.title ?? "Lyrics").font(.title2.bold()); Spacer(); Image(systemName: "quote.bubble.fill").foregroundStyle(ThemeAccent.color) }
+            Text(engine.currentTrack?.artist ?? "").foregroundStyle(Theme.muted)
+            Spacer()
+            Text("Lyrics aren't embedded in this file or available offline yet.").font(.title3.bold()).foregroundStyle(Theme.muted).multilineTextAlignment(.center).frame(maxWidth: .infinity)
+            Spacer()
+        }.padding(24).foregroundStyle(.white).background(Theme.bg.ignoresSafeArea()).presentationDetents([.medium, .large])
     }
 }
