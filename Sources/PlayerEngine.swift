@@ -8,6 +8,7 @@ final class PlayerEngine {
     private(set) var queue: [Track] = []
     private(set) var currentIndex: Int?
     private(set) var isPlaying = false
+    var autoplayEnabled = false
     private(set) var currentTime: TimeInterval = 0
     private(set) var duration: TimeInterval = 0
 
@@ -146,6 +147,9 @@ final class PlayerEngine {
         guard let i = currentIndex else { return }
         if i + 1 < queue.count {
             load(index: i + 1)
+            play()
+        } else if autoplayEnabled, !queue.isEmpty {
+            load(index: 0)
             play()
         } else {
             pause()
