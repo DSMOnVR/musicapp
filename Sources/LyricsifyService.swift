@@ -1,114 +1,87 @@
 import Foundation
 
-/// Fetches timed LRC lyrics from Lyricsify. Lyrics are saved by LibraryStore for offline use.
-enum LyricsifyService {
-    static func fetchLyrics(title: String, artist: String) async -> String? {
-        let artistSlug = slug(artist)
-        let titleSlug = slug(title)
-        guard !artistSlug.isEmpty, !titleSlug.isEmpty else { return nil }
+/// Searches LRCLIB and returns timed lyrics when available, otherwise plain lyrics.
+/// LibraryStore persists the result inside the local music library for offline use.
+enum LyricsService {
+    private struct LyricsRecord: Decodable {
+        let trackName: String?
+        let artistName: String?
+        let albumName: String?
+        let duration: Double?
+        let instrumental: Bool?
+        let plainLyrics: String?
+        let syncedLyrics: String?
+    }
 
-        let pageURL = URL(string: "https://www.lyricsify.com/lyrics/\(artistSlug)/\(titleSlug)")!
+    static func fetchLyrics(title: String, artist: String, album: String? = nil, duration: TimeInterval? = nil) async -> String? {
+        guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              !artist.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              let url = searchURL(title: title, artist: artist, album: album) else { return nil }
+
         do {
-            let html = try await fetchText(from: pageURL)
-            if let lrcPath = firstMatch(
-                in: html,
-                patterns: [
-                    #"href=["']([^"']*/lrc/[^"']+)["']"#,
-                    #"href=["']([^"']+\.lrc(?:\?[^"']*)?)["']"#
-                ]
-            ), let lrcURL = absoluteURL(lrcPath, relativeTo: pageURL),
-               let lrcPage = try? await fetchText(from: lrcURL),
-               let lrc = extractLRC(from: lrcPage) {
-                return lrc
+            var request = URLRequest(url: url)
+            request.timeoutInterval = 18
+            request.setValue("application/json", forHTTPHeaderField: "Accept")
+            request.setValue("DSM Music/1.0 (https://github.com/DSMOnVR/musicapp)", forHTTPHeaderField: "User-Agent")
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { return nil }
+
+            let records = try JSONDecoder().decode([LyricsRecord].self, from: data)
+            let targetTitle = normalize(title)
+            let targetArtist = normalize(artist)
+            let targetAlbum = normalize(album ?? "")
+
+            let candidates = records.compactMap { record -> (LyricsRecord, Int)? in
+                guard record.instrumental != true,
+                      let foundTitle = record.trackName,
+                      let foundArtist = record.artistName else { return nil }
+                let candidateTitle = normalize(foundTitle)
+                let candidateArtist = normalize(foundArtist)
+                guard candidateTitle == targetTitle || candidateTitle.contains(targetTitle) || targetTitle.contains(candidateTitle) else { return nil }
+                guard candidateArtist == targetArtist || candidateArtist.contains(targetArtist) || targetArtist.contains(candidateArtist) else { return nil }
+
+                var score = 100
+                if candidateTitle == targetTitle { score += 30 }
+                if candidateArtist == targetArtist { score += 30 }
+                if !targetAlbum.isEmpty && normalize(record.albumName ?? "") == targetAlbum { score += 12 }
+                if let duration, let foundDuration = record.duration {
+                    let difference = abs(duration - foundDuration)
+                    if difference <= 2 { score += 20 }
+                    else if difference <= 5 { score += 8 }
+                    else if difference > 15 { score -= 25 }
+                }
+                if let synced = record.syncedLyrics, !synced.isEmpty { score += 5 }
+                return (record, score)
             }
 
-            // Some song pages expose the timed text directly in the entry container.
-            if let lrc = extractLRC(from: html) { return lrc }
+            guard let best = candidates.max(by: { $0.1 < $1.1 })?.0 else { return nil }
+            if let synced = best.syncedLyrics, !synced.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return synced }
+            if let plain = best.plainLyrics, !plain.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return plain }
+            return nil
         } catch {
-            // Lyricsify may block automated requests or have no matching song.
+            return nil
         }
-        return nil
     }
 
-    private static func slug(_ value: String) -> String {
-        let folded = value.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current).lowercased()
-        let cleaned = folded.filter { $0.isLetter || $0.isNumber || $0.isWhitespace || $0 == "-" }
-        return cleaned.split(whereSeparator: { $0.isWhitespace }).joined(separator: "-")
-    }
-
-    private static func fetchText(from url: URL) async throws -> String {
-        var request = URLRequest(url: url)
-        request.timeoutInterval = 12
-        request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Mobile Safari/604.1", forHTTPHeaderField: "User-Agent")
-        request.setValue("text/html,application/xhtml+xml,application/xml;q=0.9,text/plain,*/*;q=0.8", forHTTPHeaderField: "Accept")
-        request.setValue("en-US,en;q=0.9", forHTTPHeaderField: "Accept-Language")
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode),
-              let text = String(data: data, encoding: .utf8) else {
-            throw URLError(.badServerResponse)
-        }
-        return text
-    }
-
-    private static func extractLRC(from page: String) -> String? {
-        if !page.contains("<") && looksLikeLRC(page) { return page }
-
-        // Lyricsify places lyric text inside a div whose class includes "details".
-        let lyricContainers = [
-            #"<div[^>]*class=["'][^"']*\bdetails\b[^"']*["'][^>]*>(.*?)</div>"#,
-            #"details["']?\s*>(.*?)</div>"#,
-            #"<div[^>]*id=["']entry["'][^>]*>(.*?)</div>"#,
-            #"<div[^>]*id=["']lyrics_[^"']*_details["'][^>]*>(.*?)</div>"#
+    private static func searchURL(title: String, artist: String, album: String?) -> URL? {
+        var components = URLComponents(string: "https://lrclib.net/api/search")
+        var items = [
+            URLQueryItem(name: "track_name", value: title),
+            URLQueryItem(name: "artist_name", value: artist)
         ]
-
-        for pattern in lyricContainers {
-            guard let html = firstMatch(in: page, patterns: [pattern]) else { continue }
-            let decoded = decodeHTML(stripHTML(html))
-            if looksLikeLRC(decoded) { return decoded }
+        if let album, !album.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            items.append(URLQueryItem(name: "album_name", value: album))
         }
-
-        let stripped = decodeHTML(stripHTML(page))
-        if looksLikeLRC(stripped) { return stripped }
-        return nil
+        components?.queryItems = items
+        return components?.url
     }
 
-    private static func firstMatch(in text: String, patterns: [String]) -> String? {
-        for pattern in patterns {
-            guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive, .dotMatchesLineSeparators]),
-                  let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
-                  match.numberOfRanges > 1,
-                  let range = Range(match.range(at: 1), in: text) else { continue }
-            return String(text[range])
-        }
-        return nil
-    }
-
-    private static func absoluteURL(_ value: String, relativeTo base: URL) -> URL? {
-        let cleaned = value.replacingOccurrences(of: "&amp;", with: "&")
-        if let url = URL(string: cleaned, relativeTo: base)?.absoluteURL,
-           url.scheme == "https", url.host == "www.lyricsify.com" || url.host == "lyricsify.com" {
-            return url
-        }
-        return nil
-    }
-
-    private static func stripHTML(_ html: String) -> String {
-        html.replacingOccurrences(of: "<br\\s*/?>", with: "\n", options: .regularExpression)
-            .replacingOccurrences(of: "</p\\s*>", with: "\n", options: .regularExpression)
-            .replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
-    }
-
-    private static func decodeHTML(_ value: String) -> String {
-        value.replacingOccurrences(of: "&amp;", with: "&")
-            .replacingOccurrences(of: "&quot;", with: "\"")
-            .replacingOccurrences(of: "&#39;", with: "'")
-            .replacingOccurrences(of: "&lt;", with: "<")
-            .replacingOccurrences(of: "&gt;", with: ">")
-            .replacingOccurrences(of: "&nbsp;", with: " ")
-            .replacingOccurrences(of: "&#x27;", with: "'")
-    }
-
-    private static func looksLikeLRC(_ text: String) -> Bool {
-        text.range(of: #"\[\d{1,2}:\d{2}(?:\.\d{1,3})?\]"#, options: .regularExpression) != nil
+    private static func normalize(_ value: String) -> String {
+        value.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+            .lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
