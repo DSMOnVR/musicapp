@@ -17,22 +17,13 @@ enum LyricsifyService {
                     #"href=["']([^"']+\.lrc(?:\?[^"']*)?)["']"#
                 ]
             ), let lrcURL = absoluteURL(lrcPath, relativeTo: pageURL),
-               let lrc = try? await fetchText(from: lrcURL),
-               looksLikeLRC(lrc) {
+               let lrcPage = try? await fetchText(from: lrcURL),
+               let lrc = extractLRC(from: lrcPage) {
                 return lrc
             }
 
-            // Some Lyricsify pages expose the timed text directly in the entry container.
-            if let entry = firstMatch(
-                in: html,
-                patterns: [
-                    #"<div[^>]*id=["']entry["'][^>]*>(.*?)</div>"#,
-                    #"<div[^>]*id=["']lyrics_[^"']*_details["'][^>]*>(.*?)</div>"#
-                ]
-            ) {
-                let decoded = decodeHTML(stripHTML(entry))
-                if looksLikeLRC(decoded) { return decoded }
-            }
+            // Some song pages expose the timed text directly in the entry container.
+            if let lrc = extractLRC(from: html) { return lrc }
         } catch {
             // Lyricsify may block automated requests or have no matching song.
         }
@@ -57,6 +48,21 @@ enum LyricsifyService {
             throw URLError(.badServerResponse)
         }
         return text
+    }
+
+    private static func extractLRC(from page: String) -> String? {
+        if !page.contains("<") && looksLikeLRC(page) { return page }
+        if let entry = firstMatch(
+            in: page,
+            patterns: [
+                #"<div[^>]*id=["']entry["'][^>]*>(.*?)</div>"#,
+                #"<div[^>]*id=["']lyrics_[^"']*_details["'][^>]*>(.*?)</div>"#
+            ]
+        ) {
+            let decoded = decodeHTML(stripHTML(entry))
+            if looksLikeLRC(decoded) { return decoded }
+        }
+        return nil
     }
 
     private static func firstMatch(in text: String, patterns: [String]) -> String? {
