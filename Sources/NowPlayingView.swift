@@ -36,6 +36,7 @@ struct NowPlayingView: View {
                 Button { showLyrics = true } label: { Label("Lyrics", systemImage: "quote.bubble").font(.subheadline.bold()) }
                 Button { showQueue = true } label: { Label("Queue", systemImage: "list.number").font(.subheadline.bold()) }
                 Button { showSleepTimer = true } label: { Label("Sleep timer", systemImage: "moon.zzz").font(.subheadline.bold()) }
+                AirPlayRoutePicker().frame(width: 34, height: 34)
             }.buttonStyle(.plain).foregroundStyle(.white).padding(.top, 28)
             Spacer(minLength: 18)
         }
