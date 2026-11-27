@@ -6,6 +6,7 @@ struct HomeView: View {
     var onImport: () -> Void
     var onOpenPlayer: () -> Void
     @State private var search = ""
+    @State private var showListeningStats = false
     @State private var artistPhotos: [String: UIImage] = [:]
     private var recent: [Track] { Array(library.tracks.reversed().prefix(8)) }
     var body: some View {
@@ -29,7 +30,7 @@ struct HomeView: View {
                         quickCard("All Music", icon: "music.note", count: "\(library.tracks.count) songs") { engine.setQueue(library.tracks) }
                     }
                     HStack(spacing: 12) {
-                        quickCard("Listening time", icon: "clock.fill", count: listeningTime) { }
+                        quickCard("Listening time", icon: "clock.fill", count: listeningTime) { showListeningStats = true }
                         quickCard("Most played", icon: "chart.bar.fill", count: "\(library.mostPlayed.first.map { library.playCounts[$0.id, default: 0] } ?? 0) plays") {
                             if let top = library.mostPlayed.first { engine.setQueue([top]) }
                         }
@@ -75,6 +76,7 @@ struct HomeView: View {
             }.padding(.horizontal, 22).padding(.top, 18).padding(.bottom, 20)
         }
         .foregroundStyle(.white)
+        .sheet(isPresented: $showListeningStats) { ListeningStatsView().environment(library).presentationDetents([.medium, .large]) }
         .task(id: library.artists) {
             for artist in library.artists where artistPhotos[artist] == nil {
                 if let photo = await ArtistImageStore.image(for: artist) {
