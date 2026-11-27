@@ -2,12 +2,14 @@
 import SwiftUI
 import WidgetKit
 import UniformTypeIdentifiers
+import GoogleSignIn
 
 @main
 struct MusicApp: App {
     @State private var engine = PlayerEngine()
     @State private var library = LibraryStore()
     @State private var appTheme = AppTheme()
+    @State private var cloudBackup = GoogleDriveBackup()
 
     var body: some Scene {
         WindowGroup {
@@ -15,6 +17,7 @@ struct MusicApp: App {
                 .environment(engine)
                 .environment(library)
                 .environment(appTheme)
+                .environment(cloudBackup)
                 .preferredColorScheme(
                     appTheme.appearance == "Auto"
                     ? nil
@@ -35,6 +38,7 @@ struct RootView: View {
     @Environment(PlayerEngine.self) private var engine
     @Environment(LibraryStore.self) private var library
     @Environment(AppTheme.self) private var appTheme
+    @Environment(GoogleDriveBackup.self) private var cloudBackup
     @Environment(\.scenePhase) private var scenePhase
 
     @State private var selectedTab: MainTab = .home
@@ -93,8 +97,14 @@ struct RootView: View {
         .onChange(of: engine.isPlaying) { _, _ in
             publishWidgetSnapshot()
         }
+        .onOpenURL { url in GIDSignIn.sharedInstance.handle(url) }
+        .onReceive(NotificationCenter.default.publisher(for: .dsmMusicLibraryDidChange)) { _ in
+            Task { await cloudBackup.backupIfSignedIn(library) }
+        }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
+                cloudBackup.restorePreviousSignIn()
+                Task { await cloudBackup.backupIfSignedIn(library) }
                 publishWidgetSnapshot()
             }
         }
@@ -103,6 +113,7 @@ struct RootView: View {
         }
         .task {
             appTheme.updateArtworkAccent(from: engine.currentTrack?.artworkData)
+            cloudBackup.restorePreviousSignIn()
             publishWidgetSnapshot()
         }
         .onChange(of: Int(engine.currentTime)) { _, second in
