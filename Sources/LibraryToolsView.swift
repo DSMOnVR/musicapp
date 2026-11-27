@@ -62,7 +62,7 @@ struct PersonalLibraryToolsView: View {
                     Button { showImporter = true } label: {
                         Label("Restore library backup", systemImage: "square.and.arrow.down")
                     }
-                    Text("Backups include song details, playlists, likes and listening statistics. Audio files are not copied; they must remain in the app's Documents folder.")
+                    Text("Backups include song details, playlists, likes and listening statistics. Audio files are not included; restore works when the matching audio files are already in this app's Documents folder.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 if let errorMessage {
