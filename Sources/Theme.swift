@@ -1,5 +1,6 @@
 import SwiftUI
 import Observation
+import UIKit
 
 @Observable
 final class AppTheme {
@@ -16,11 +17,53 @@ final class AppTheme {
             }
         }
     }
-    var preset: Preset = .mono
-    var useArtworkColors = true
-    var appearance = "Dark"
-    var reduceMotion = false
-    var accent: Color { preset.colors[0] }
+
+    var preset: Preset = .mono { didSet { save() } }
+    var useArtworkColors = true { didSet { save() } }
+    var appearance = "Dark" { didSet { save() } }
+    var reduceMotion = false { didSet { save() } }
+    var customAccentHex: String? { didSet { save() } }
+    var useCustomAccent = false { didSet { save() } }
+
+    var customAccent: Color {
+        get {
+            guard let customAccentHex, let value = UInt64(customAccentHex, radix: 16) else { return preset.colors[0] }
+            return Color(
+                red: Double((value >> 16) & 0xff) / 255,
+                green: Double((value >> 8) & 0xff) / 255,
+                blue: Double(value & 0xff) / 255
+            )
+        }
+        set {
+            let ui = UIColor(newValue)
+            var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
+            ui.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+            customAccentHex = String(format: "%02X%02X%02X", Int(red * 255), Int(green * 255), Int(blue * 255))
+            useCustomAccent = true
+        }
+    }
+
+    var accent: Color { useCustomAccent ? customAccent : preset.colors[0] }
+
+    init() {
+        let defaults = UserDefaults.standard
+        if let raw = defaults.string(forKey: "dsm.theme.preset"), let saved = Preset(rawValue: raw) { preset = saved }
+        useArtworkColors = defaults.object(forKey: "dsm.theme.artwork") as? Bool ?? true
+        appearance = defaults.string(forKey: "dsm.theme.appearance") ?? "Dark"
+        reduceMotion = defaults.bool(forKey: "dsm.theme.reduceMotion")
+        customAccentHex = defaults.string(forKey: "dsm.theme.customAccent")
+        useCustomAccent = defaults.bool(forKey: "dsm.theme.useCustomAccent")
+    }
+
+    private func save() {
+        let defaults = UserDefaults.standard
+        defaults.set(preset.rawValue, forKey: "dsm.theme.preset")
+        defaults.set(useArtworkColors, forKey: "dsm.theme.artwork")
+        defaults.set(appearance, forKey: "dsm.theme.appearance")
+        defaults.set(reduceMotion, forKey: "dsm.theme.reduceMotion")
+        defaults.set(customAccentHex, forKey: "dsm.theme.customAccent")
+        defaults.set(useCustomAccent, forKey: "dsm.theme.useCustomAccent")
+    }
 }
 
 enum Theme {
