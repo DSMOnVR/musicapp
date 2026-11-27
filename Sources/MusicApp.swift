@@ -39,6 +39,7 @@ struct RootView: View {
     @State private var showFolderImporter = false
     @State private var showNowPlaying = false
     @State private var isImporting = false
+    @State private var lastStatsSecond = -1
 
     var body: some View {
         VStack(spacing: 0) {
@@ -79,6 +80,16 @@ struct RootView: View {
             TabBar(selection: $selectedTab)
         }
         .background(Theme.bg.ignoresSafeArea())
+        .onChange(of: engine.currentTrack?.id) { _, _ in
+            if let track = engine.currentTrack { library.recordPlay(track) }
+        }
+        .onChange(of: Int(engine.currentTime)) { _, second in
+            guard engine.isPlaying, second != lastStatsSecond else { return }
+            if lastStatsSecond >= 0 && second > lastStatsSecond {
+                library.addListeningTime(min(Double(second - lastStatsSecond), 1))
+            }
+            lastStatsSecond = second
+        }
 
         .sheet(isPresented: $showNowPlaying) {
             NowPlayingView()
