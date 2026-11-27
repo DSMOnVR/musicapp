@@ -52,16 +52,40 @@ final class LibraryStore {
     var mostPlayed: [Track] { tracks.sorted { (playCounts[$0.id] ?? 0) > (playCounts[$1.id] ?? 0) } }
 
     var duplicateGroups: [[Track]] {
-        Dictionary(grouping: tracks) { track in
-            let title = track.title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            let artist = track.artist.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            let durationBucket = Int(track.duration.rounded())
-            return "\(title)|\(artist)|\(durationBucket)"
+        // First match normalized title + artist, then compare durations with a
+        // tolerance. This avoids missing duplicates that fall on opposite
+        // sides of a rounded-second bucket.
+        let candidates = Dictionary(grouping: tracks) { track in
+            "\(normalizedDuplicateText(track.title))|\(normalizedDuplicateText(track.artist))"
         }
-        .values
-        .filter { $0.count > 1 }
-        .map { $0.sorted { (playCounts[$0.id] ?? 0) > (playCounts[$1.id] ?? 0) } }
-        .sorted { ($0.first?.title ?? "") < ($1.first?.title ?? "") }
+
+        var matches: [[Track]] = []
+        for (key, bucket) in candidates where !key.hasPrefix("|") && !key.hasSuffix("|") && bucket.count > 1 {
+            let sorted = bucket.sorted { $0.duration < $1.duration }
+            var group: [Track] = []
+            var referenceDuration: TimeInterval?
+
+            for track in sorted {
+                if let referenceDuration, abs(track.duration - referenceDuration) > 5 {
+                    if group.count > 1 { matches.append(group) }
+                    group = []
+                    referenceDuration = nil
+                }
+                if referenceDuration == nil { referenceDuration = track.duration }
+                group.append(track)
+            }
+            if group.count > 1 { matches.append(group) }
+        }
+
+        return matches
+            .map { $0.sorted { (playCounts[$0.id] ?? 0) > (playCounts[$1.id] ?? 0) } }
+            .sorted { ($0.first?.title ?? "").localizedCaseInsensitiveCompare($1.first?.title ?? "") == .orderedAscending }
+    }
+
+    private func normalizedDuplicateText(_ value: String) -> String {
+        let folded = value.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+        let words = folded.unicodeScalars.map { CharacterSet.alphanumerics.contains($0) ? String($0) : " " }
+        return words.joined().split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
     }
 
     func removeDuplicateTracks() {
