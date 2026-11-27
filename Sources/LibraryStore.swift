@@ -29,6 +29,7 @@ final class LibraryStore {
     var playlists: [MusicPlaylist] = []
     var playCounts: [UUID: Int] = [:]
     var listeningSeconds: TimeInterval = 0
+    var dailyPlayCounts: [String: Int] = [:]
     var lastImportMessage: String?
     var importErrors: [String] = []
 
@@ -167,8 +168,19 @@ final class LibraryStore {
 
     func recordPlay(_ track: Track) {
         playCounts[track.id, default: 0] += 1
+        let key = Self.historyDateFormatter.string(from: .now)
+        dailyPlayCounts[key, default: 0] += 1
         saveLibrary()
     }
+
+    static let historyDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = .current
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
     func addListeningTime(_ seconds: TimeInterval) {
         guard seconds > 0, seconds < 5 else { return }
         listeningSeconds += seconds
@@ -213,6 +225,7 @@ final class LibraryStore {
         var playlists: [MusicPlaylist]?
         var playCounts: [UUID: Int]?
         var listeningSeconds: TimeInterval?
+        var dailyPlayCounts: [String: Int]?
     }
 
     private func loadSavedLibrary() {
@@ -223,10 +236,11 @@ final class LibraryStore {
         playlists = saved.playlists ?? []
         playCounts = saved.playCounts ?? [:]
         listeningSeconds = saved.listeningSeconds ?? 0
+        dailyPlayCounts = saved.dailyPlayCounts ?? [:]
     }
 
     private func saveLibrary() {
-        let saved = SavedLibrary(tracks: tracks, likedIDs: likedIDs, playlists: playlists, playCounts: playCounts, listeningSeconds: listeningSeconds)
+        let saved = SavedLibrary(tracks: tracks, likedIDs: likedIDs, playlists: playlists, playCounts: playCounts, listeningSeconds: listeningSeconds, dailyPlayCounts: dailyPlayCounts)
         guard let data = try? JSONEncoder().encode(saved) else { return }
         try? data.write(to: storageURL, options: .atomic)
     }
