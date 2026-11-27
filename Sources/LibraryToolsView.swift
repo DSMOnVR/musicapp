@@ -122,7 +122,10 @@ struct PersonalLibraryToolsView: View {
                         Text("Connected as \(email)").font(.caption).foregroundStyle(.secondary)
                     }
                     Button {
-                        Task { await cloudBackup.signIn() }
+                        Task {
+                            await cloudBackup.signIn()
+                            if cloudBackup.isSignedIn { await cloudBackup.backupNow(library) }
+                        }
                     } label: {
                         Label(cloudBackup.isSignedIn ? "Reconnect Google account" : "Connect Google Drive", systemImage: "person.crop.circle.badge.checkmark")
                     }
