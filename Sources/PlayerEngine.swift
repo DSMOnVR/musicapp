@@ -65,6 +65,39 @@ final class PlayerEngine {
         play()
     }
 
+    func addToQueue(_ track: Track, playNext: Bool = false) {
+        if playNext, let currentIndex {
+            queue.insert(track, at: min(currentIndex + 1, queue.count))
+        } else {
+            queue.append(track)
+        }
+    }
+
+    func moveQueueItem(from source: IndexSet, to destination: Int) {
+        let oldCurrentID = currentTrack?.id
+        queue.move(fromOffsets: source, toOffset: destination)
+        currentIndex = oldCurrentID.flatMap { id in queue.firstIndex(where: { $0.id == id }) }
+    }
+
+    func removeQueueItem(at index: Int) {
+        guard queue.indices.contains(index) else { return }
+        let removedCurrent = index == currentIndex
+        queue.remove(at: index)
+        if queue.isEmpty {
+            pause()
+            currentIndex = nil
+            player.replaceCurrentItem(with: nil)
+            duration = 0
+            currentTime = 0
+        } else if removedCurrent {
+            let nextIndex = min(index, queue.count - 1)
+            load(index: nextIndex)
+            play()
+        } else if let currentIndex, index < currentIndex {
+            self.currentIndex = currentIndex - 1
+        }
+    }
+
     func setSleepTimer(minutes: Int) {
         sleepTask?.cancel()
         sleepTask = Task { [weak self] in
