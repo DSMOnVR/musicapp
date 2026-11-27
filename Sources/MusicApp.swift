@@ -1,5 +1,6 @@
 
 import SwiftUI
+import WidgetKit
 import UniformTypeIdentifiers
 
 @main
@@ -86,12 +87,14 @@ struct RootView: View {
                 library.recordPlay(track)
                 appTheme.updateArtworkAccent(from: track.artworkData)
             }
+            publishWidgetSnapshot()
         }
         .onChange(of: appTheme.useArtworkColors) { _, enabled in
             if enabled { appTheme.updateArtworkAccent(from: engine.currentTrack?.artworkData) }
         }
         .task {
             appTheme.updateArtworkAccent(from: engine.currentTrack?.artworkData)
+            publishWidgetSnapshot()
         }
         .onChange(of: Int(engine.currentTime)) { _, second in
             guard engine.isPlaying, second != lastStatsSecond else { return }
