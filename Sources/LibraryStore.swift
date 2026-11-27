@@ -28,6 +28,7 @@ final class LibraryStore {
 
     private let storageURL: URL
     @ObservationIgnored private var fetchingLyricsIDs: Set<UUID> = []
+    @ObservationIgnored private var unsavedListeningSeconds: TimeInterval = 0
 
     init() {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -117,7 +118,11 @@ final class LibraryStore {
     func addListeningTime(_ seconds: TimeInterval) {
         guard seconds > 0, seconds < 5 else { return }
         listeningSeconds += seconds
-        saveLibrary()
+        unsavedListeningSeconds += seconds
+        if unsavedListeningSeconds >= 15 {
+            unsavedListeningSeconds = 0
+            saveLibrary()
+        }
     }
 
     func remove(_ track: Track) {
