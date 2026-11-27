@@ -12,6 +12,8 @@ struct NowPlayingView: View {
     @State private var showCredits = false
     @State private var showSleepTimer = false
     @State private var editingTrack: Track?
+    @AppStorage("dsm.nowplaying.vinyl") private var vinylMode = false
+    @AppStorage("dsm.nowplaying.background") private var backgroundStyle = "Artwork blur"
     private var shownTime: Double { scrubTime ?? engine.currentTime }
     var body: some View {
         VStack(spacing: 0) {
@@ -23,6 +25,13 @@ struct NowPlayingView: View {
                         Button("Edit song details", systemImage: "pencil") { editingTrack = track }
                     }
                     Button("Sleep timer", systemImage: "moon.zzz") { showSleepTimer = true }
+                    Toggle("Animated vinyl mode", isOn: $vinylMode)
+                    Picker("Now Playing background", selection: $backgroundStyle) {
+                        Text("Artwork blur").tag("Artwork blur")
+                        Text("Midnight").tag("Midnight")
+                        Text("Purple gradient").tag("Purple gradient")
+                        Text("Plain dark").tag("Plain dark")
+                    }
                     Button("Song credits", systemImage: "person.text.rectangle") { showCredits = true }
                     Button(engine.autoplayEnabled ? "Turn Autoplay Off" : "Turn Autoplay On", systemImage: "infinity") { engine.autoplayEnabled.toggle() }
                     Button(engine.volumeNormalizationEnabled ? "Turn Volume Normalization Off" : "Turn Volume Normalization On", systemImage: "waveform.path") { engine.volumeNormalizationEnabled.toggle() }
@@ -85,13 +94,31 @@ struct NowPlayingView: View {
     }
 
     private var artwork: some View {
-        ArtworkView(track: engine.currentTrack ?? Track(title: "Your music", artist: "Offline player", album: "", url: URL(fileURLWithPath: "/"), duration: 0, artworkData: nil))
-            .aspectRatio(1, contentMode: .fit)
-            .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 30, style: .continuous).stroke(.white.opacity(0.18), lineWidth: 1))
-            .shadow(color: .black.opacity(0.35), radius: 28, x: 0, y: 18)
-            .scaleEffect(engine.isPlaying ? 1 : 0.985)
-            .animation(.spring(response: 0.55, dampingFraction: 0.78), value: engine.isPlaying)
+        Group {
+            if vinylMode {
+                TimelineView(.animation(minimumInterval: 0.03, paused: !engine.isPlaying)) { timeline in
+                    let seconds = timeline.date.timeIntervalSinceReferenceDate
+                    ArtworkView(track: engine.currentTrack ?? Track(title: "Your music", artist: "Offline player", album: "", url: URL(fileURLWithPath: "/"), duration: 0, artworkData: nil))
+                        .clipShape(Circle())
+                        .overlay(Circle().stroke(.white.opacity(0.24), lineWidth: 5))
+                        .overlay(Circle().stroke(.black.opacity(0.45), lineWidth: 1).padding(9))
+                        .overlay(Circle().fill(.black).frame(width: 24, height: 24).overlay(Circle().fill(.white.opacity(0.55)).frame(width: 5, height: 5)))
+                        .rotationEffect(.degrees(engine.isPlaying ? seconds.truncatingRemainder(dividingBy: 4) * 90 : 0))
+                }
+            } else {
+                ArtworkView(track: engine.currentTrack ?? Track(title: "Your music", artist: "Offline player", album: "", url: URL(fileURLWithPath: "/"), duration: 0, artworkData: nil))
+                    .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
+            }
+        }
+        .aspectRatio(1, contentMode: .fit)
+        .overlay {
+            if !vinylMode {
+                RoundedRectangle(cornerRadius: 30, style: .continuous).stroke(.white.opacity(0.18), lineWidth: 1)
+            }
+        }
+        .shadow(color: .black.opacity(0.35), radius: 28, x: 0, y: 18)
+        .scaleEffect(engine.isPlaying ? 1 : 0.985)
+        .animation(.spring(response: 0.55, dampingFraction: 0.78), value: engine.isPlaying)
     }
     private var titleRow: some View {
         HStack(spacing: 14) {
