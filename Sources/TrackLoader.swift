@@ -40,7 +40,7 @@ enum TrackLoader {
         }
 
         let artworkItem = AVMetadataItem.metadataItems(from: metadata, filteredByIdentifier: .commonIdentifierArtwork).first
-        let artworkData = try? await artworkItem?.load(.dataValue)
+        var artworkData = try? await artworkItem?.load(.dataValue)
 
         let lyricIdentifiers: [AVMetadataIdentifier] = [
             .iTunesMetadataLyrics,
@@ -56,10 +56,17 @@ enum TrackLoader {
             }
         }
 
+        let title = await string(.commonIdentifierTitle) ?? destination.deletingPathExtension().lastPathComponent
+        let artist = await string(.commonIdentifierArtist) ?? "Unknown Artist"
+        let album = await string(.commonIdentifierAlbumName) ?? "Unknown Album"
+        if artworkData == nil {
+            artworkData = await AlbumArtworkService.artwork(title: title, artist: artist)
+        }
+
         return Track(
-            title: await string(.commonIdentifierTitle) ?? destination.deletingPathExtension().lastPathComponent,
-            artist: await string(.commonIdentifierArtist) ?? "Unknown Artist",
-            album: await string(.commonIdentifierAlbumName) ?? "Unknown Album",
+            title: title,
+            artist: artist,
+            album: album,
             url: destination,
             duration: seconds.isFinite ? seconds : 0,
             artworkData: artworkData,
