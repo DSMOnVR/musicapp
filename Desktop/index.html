@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>DSM Music</title><link rel="stylesheet" href="styles.css"></head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand"><div class="brand-icon">D</div><div><b>DSM Music</b><small>YOUR MUSIC, YOUR WAY</small></div></div>
+    <div class="nav-label">LIBRARY</div>
+    <button class="nav active" data-view="all">◫ <span>All songs</span></button>
+    <button class="nav" data-view="artists">♬ <span>Artists</span></button>
+    <button class="nav" data-view="albums">▦ <span>Albums</span></button>
+    <button class="nav" data-view="playlists">☷ <span>Playlists</span></button>
+    <div class="side-bottom"><div class="cloud">♫</div><b>Your music stays yours</b><small>Imported songs are stored on this PC and stay here between app updates.</small></div>
+  </aside>
+  <main>
+    <header><div class="crumb">DSM MUSIC <span>/</span> <b id="viewTitle">All songs</b></div><div class="header-actions"><input id="search" placeholder="Search songs, artists, albums…"><button class="primary" id="importBtn">＋ Import music</button></div></header>
+    <section class="welcome"><div><div class="eyebrow">YOUR PERSONAL MUSIC SPACE</div><h1>All your music.<br><em>One place.</em></h1><p>Play your collection, build playlists, and enjoy your music offline.</p></div><div class="disc"><div class="disc-center">DSM</div></div></section>
+    <div class="section-head"><div><h2 id="sectionTitle">Your library</h2><p id="songCount">0 songs in your collection</p></div><button class="quiet" id="sortBtn">Recently added ↓</button></div>
+    <div id="empty" class="empty"><div class="empty-note">♫</div><h3>Your library is waiting</h3><p>Import MP3, M4A, WAV, FLAC, or other audio files to get started.</p><button class="primary" id="emptyImport">Import your music</button></div>
+    <div id="trackList" class="track-list"></div>
+  </main>
+  <footer class="player">
+    <div class="now"><div class="art" id="nowArt">♫</div><div><b id="nowTitle">Nothing playing</b><small id="nowArtist">Choose a song to begin</small></div></div>
+    <div class="controls"><div class="control-buttons"><button id="prev">Ⅱ</button><button id="play" class="play">▶</button><button id="next">Ⅱ</button></div><div class="timeline"><span id="elapsed">0:00</span><input id="seek" type="range" min="0" max="100" value="0"><span id="duration">0:00</span></div></div>
+    <div class="volume"><span>🔊</span><input id="volume" type="range" min="0" max="1" step=".01" value=".8"></div>
+  </footer>
+  <audio id="audio"></audio>
+</div><script src="renderer.js"></script></body></html>
