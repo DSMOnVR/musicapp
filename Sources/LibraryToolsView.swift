@@ -107,7 +107,7 @@ struct PersonalLibraryToolsView: View {
 
 struct TrackMetadataEditor: View {
     @Environment(LibraryStore.self) private var library
-    @Environment(\\.dismiss) private var dismiss
+    @Environment(\.dismiss) private var dismiss
     let track: Track
     @State private var title: String
     @State private var artist: String
