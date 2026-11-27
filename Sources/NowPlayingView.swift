@@ -129,6 +129,7 @@ struct QueueSheet: View {
 struct LyricsSheet: View {
     @Environment(PlayerEngine.self) private var engine
     @Environment(LibraryStore.self) private var library
+    @Environment(AppTheme.self) private var appTheme
 
     private var track: Track? {
         guard let playing = engine.currentTrack else { return nil }
@@ -136,91 +137,158 @@ struct LyricsSheet: View {
     }
     private var lyrics: String { track?.lyrics ?? "" }
     private var timedLines: [TimedLyricLine] { LyricsParser.lines(from: lyrics) }
-    private var activeLineID: Int? {
-        timedLines.last(where: { $0.time <= engine.currentTime })?.id ?? timedLines.first?.id
+    private var activeIndex: Int? {
+        timedLines.lastIndex(where: { $0.time <= engine.currentTime }) ?? (timedLines.isEmpty ? nil : 0)
     }
+    private var activeLineID: Int? {
+        activeIndex.map { timedLines[$0].id }
+    }
+
+    private func highlightedLine(_ line: TimedLyricLine, index: Int) -> AttributedString {
+        let words = line.text.split(separator: " ", omittingEmptySubsequences: false)
+        let nextTime = index + 1 < timedLines.count ? timedLines[index + 1].time : line.time + 4.0
+        let lineDuration = max(nextTime - line.time, 0.8)
+        let progress = min(max((engine.currentTime - line.time) / lineDuration, 0), 0.999)
+        let litWord = min(Int(progress * Double(max(words.count, 1))), max(words.count - 1, 0))
+
+        var result = AttributedString()
+        for (wordIndex, word) in words.enumerated() {
+            var part = AttributedString(String(word))
+            if wordIndex < litWord {
+                part.foregroundColor = .white
+            } else if wordIndex == litWord {
+                part.foregroundColor = Color(white: 0.78)
+            } else {
+                part.foregroundColor = .white.opacity(0.34)
+            }
+            result.append(part)
+            if wordIndex < words.count - 1 {
+                result.append(AttributedString(" "))
+            }
+        }
+        return result
+    }
+
     var body: some View {
         NavigationStack {
-            VStack(alignment: .leading, spacing: 16) {
+            ZStack {
+                Theme.bg.ignoresSafeArea()
                 if let track {
-                    Text(track.title).font(.title2.bold())
-                    Text(track.artist).foregroundStyle(Theme.muted)
+                    VStack(alignment: .leading, spacing: 0) {
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text(track.title)
+                                .font(.system(size: 18, weight: .bold))
+                                .lineLimit(1)
+                            Text(track.artist)
+                                .font(.subheadline)
+                                .foregroundStyle(Theme.muted)
+                        }
+                        .padding(.horizontal, 22)
+                        .padding(.top, 12)
+                        .padding(.bottom, 20)
 
-                    if !lyrics.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        if !timedLines.isEmpty {
-                            ScrollViewReader { proxy in
-                                ScrollView {
-                                    LazyVStack(alignment: .leading, spacing: 18) {
-                                        ForEach(timedLines) { line in
-                                            Text(line.text.isEmpty ? "♪" : line.text)
-                                                .font(.system(size: 22, weight: activeLineID == line.id ? .bold : .semibold))
-                                                .foregroundStyle(activeLineID == line.id ? ThemeAccent.color : .white.opacity(0.48))
-                                                .frame(maxWidth: .infinity, alignment: .leading)
-                                                .id(line.id)
+                        if !lyrics.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            if !timedLines.isEmpty {
+                                ScrollViewReader { proxy in
+                                    ScrollView {
+                                        LazyVStack(alignment: .leading, spacing: 23) {
+                                            ForEach(Array(timedLines.enumerated()), id: \.element.id) { index, line in
+                                                let isActive = activeLineID == line.id
+                                                Text(highlightedLine(line, index: index))
+                                                    .font(.system(size: isActive ? 34 : 27, weight: isActive ? .bold : .semibold, design: .rounded))
+                                                    .tracking(isActive ? -0.8 : -0.5)
+                                                    .lineSpacing(7)
+                                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                                    .scaleEffect(isActive ? 1.0 : 0.97, anchor: .leading)
+                                                    .opacity(isActive ? 1 : 0.68)
+                                                    .animation(.spring(response: 0.38, dampingFraction: 0.82), value: isActive)
+                                                    .id(line.id)
+                                            }
                                         }
-                                    }.padding(.vertical, 16)
-                                }
-                                .onAppear {
-                                    if let activeLineID { proxy.scrollTo(activeLineID, anchor: .center) }
-                                }
-                                .onChange(of: activeLineID) { _, nextID in
-                                    guard let nextID else { return }
-                                    withAnimation(.easeInOut(duration: 0.25)) {
-                                        proxy.scrollTo(nextID, anchor: .center)
+                                        .padding(.horizontal, 24)
+                                        .padding(.top, 24)
+                                        .padding(.bottom, 180)
                                     }
+                                    .scrollIndicators(.hidden)
+                                    .onAppear {
+                                        if let activeLineID { proxy.scrollTo(activeLineID, anchor: .center) }
+                                    }
+                                    .onChange(of: activeLineID) { _, nextID in
+                                        guard let nextID else { return }
+                                        withAnimation(.spring(response: 0.55, dampingFraction: 0.86)) {
+                                            proxy.scrollTo(nextID, anchor: .center)
+                                        }
+                                    }
+                                }
+                            } else {
+                                ScrollView {
+                                    Text(lyrics)
+                                        .font(.system(size: 25, weight: .semibold, design: .rounded))
+                                        .foregroundStyle(.white)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .textSelection(.enabled)
+                                        .padding(24)
                                 }
                             }
                         } else {
-                            ScrollView {
-                                Text(lyrics)
-                                    .font(.system(size: 19, weight: .medium))
-                                    .foregroundStyle(.white)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .textSelection(.enabled)
-                                    .padding(.vertical, 12)
+                            Spacer()
+                            VStack(spacing: 14) {
+                                Image(systemName: "quote.bubble")
+                                    .font(.system(size: 38, weight: .light))
+                                    .foregroundStyle(appTheme.accent)
+                                switch library.lyricsStatus(for: track) {
+                                case .searching:
+                                    ProgressView().tint(appTheme.accent)
+                                    Text("Finding your lyrics").font(.headline)
+                                    Text("They’ll be saved for offline listening.")
+                                        .font(.caption).foregroundStyle(Theme.muted)
+                                case .notFound:
+                                    Text("Lyrics not found").font(.title3.bold())
+                                    Text("Try searching again for this song.")
+                                        .font(.subheadline).foregroundStyle(Theme.muted)
+                                    Button {
+                                        library.retryLyrics(for: track)
+                                    } label: {
+                                        Label("Search again", systemImage: "arrow.clockwise")
+                                            .font(.subheadline.bold())
+                                            .padding(.horizontal, 18).padding(.vertical, 11)
+                                            .background(.ultraThinMaterial, in: Capsule())
+                                    }
+                                    .tint(.white)
+                                case .found:
+                                    Text("No readable lyrics").font(.headline)
+                                }
                             }
+                            .frame(maxWidth: .infinity)
+                            Spacer()
                         }
-                    } else {
-                        Spacer(minLength: 8)
-                        switch library.lyricsStatus(for: track) {
-                        case .searching:
-                            ProgressView().tint(ThemeAccent.color)
-                            Text("Searching LRCLIB…").font(.headline)
-                            Text("Lyrics will be saved automatically when found.")
-                                .font(.caption).foregroundStyle(Theme.muted)
-                        case .notFound:
-                            ContentUnavailableView(
-                                "Lyrics not found",
-                                systemImage: "quote.bubble",
-                                description: Text("No lyrics were found for this song. Try searching again later.")
-                            )
-                            Button {
-                                library.retryLyrics(for: track)
-                            } label: {
-                                Label("Search for lyrics again", systemImage: "arrow.clockwise")
-                                    .frame(maxWidth: .infinity)
-                            }
-                            .buttonStyle(.bordered).tint(ThemeAccent.color)
-                        case .found:
-                            ContentUnavailableView("No readable lyrics", systemImage: "text.quote")
-                        }
-                        Spacer(minLength: 8)
                     }
-
-
                 } else {
                     ContentUnavailableView("Nothing playing", systemImage: "music.note")
                 }
             }
-            .padding(24).foregroundStyle(.white).background(Theme.bg.ignoresSafeArea())
-            .navigationTitle("Lyrics").navigationBarTitleDisplayMode(.inline)
-
+            .safeAreaInset(edge: .bottom) {
+                HStack(spacing: 10) {
+                    Image(systemName: "waveform")
+                    Text("SYNCED LYRICS")
+                        .font(.caption2.weight(.bold))
+                        .tracking(1.5)
+                }
+                .foregroundStyle(.white.opacity(0.72))
+                .padding(.horizontal, 18)
+                .padding(.vertical, 12)
+                .background(.ultraThinMaterial, in: Capsule())
+                .overlay(Capsule().stroke(.white.opacity(0.12), lineWidth: 1))
+                .padding(.bottom, 14)
+            }
+            .navigationTitle("Lyrics")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
         }
         .task(id: track?.id) {
             if let track { library.fetchLyricsIfNeeded(for: track) }
         }
         .presentationDetents([.large])
     }
-
-
 }
