@@ -3,7 +3,7 @@ name: Unzip, commit and build
 
 on:
   push:
-    paths: ["MusicApp.zip"]
+    paths: ["MusicApp.zip", "Sources/**", "project.yml"]
   workflow_dispatch:
 
 permissions:
