@@ -11,12 +11,12 @@ final class AppTheme {
             case .lime: return [Color(red: 0.72, green: 0.98, blue: 0.16), Color(red: 0.24, green: 0.42, blue: 0.12)]
             case .sunset: return [Color(red: 1, green: 0.39, blue: 0.48), Color(red: 1, green: 0.66, blue: 0.27)]
             case .ocean: return [Color(red: 0.10, green: 0.77, blue: 0.83), Color(red: 0.10, green: 0.29, blue: 0.62)]
-            case .mono: return [.white, Color(white: 0.42)]
+            case .mono: return [Color(white: 0.72), Color(white: 0.34)]
             case .artwork: return [Color(red: 0.78, green: 0.31, blue: 0.77), Color(red: 0.35, green: 0.28, blue: 0.88)]
             }
         }
     }
-    var preset: Preset = .lime
+    var preset: Preset = .mono
     var useArtworkColors = true
     var appearance = "Dark"
     var reduceMotion = false
