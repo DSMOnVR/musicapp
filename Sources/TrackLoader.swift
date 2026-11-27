@@ -32,13 +32,29 @@ enum TrackLoader {
         let loadedDuration = try await asset.load(.duration)
         let seconds = loadedDuration.seconds
         let metadata = try await asset.load(.commonMetadata)
+        let allMetadata = (try? await asset.load(.metadata)) ?? []
 
         func string(_ identifier: AVMetadataIdentifier) async -> String? {
             guard let item = AVMetadataItem.metadataItems(from: metadata, filteredByIdentifier: identifier).first else { return nil }
             return try? await item.load(.stringValue)
         }
+
         let artworkItem = AVMetadataItem.metadataItems(from: metadata, filteredByIdentifier: .commonIdentifierArtwork).first
         let artworkData = try? await artworkItem?.load(.dataValue)
+
+        let lyricIdentifiers: [AVMetadataIdentifier] = [
+            .iTunesMetadataLyrics,
+            .id3MetadataUnsynchronizedLyric
+        ]
+        var embeddedLyrics: String?
+        for identifier in lyricIdentifiers {
+            if let item = AVMetadataItem.metadataItems(from: allMetadata, filteredByIdentifier: identifier).first,
+               let value = try? await item.load(.stringValue),
+               !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                embeddedLyrics = value
+                break
+            }
+        }
 
         return Track(
             title: await string(.commonIdentifierTitle) ?? destination.deletingPathExtension().lastPathComponent,
@@ -46,7 +62,8 @@ enum TrackLoader {
             album: await string(.commonIdentifierAlbumName) ?? "Unknown Album",
             url: destination,
             duration: seconds.isFinite ? seconds : 0,
-            artworkData: artworkData
+            artworkData: artworkData,
+            lyrics: embeddedLyrics
         )
     }
 }
