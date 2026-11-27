@@ -1,6 +1,10 @@
 import Foundation
 import Observation
 
+extension Notification.Name {
+    static let dsmMusicLibraryDidChange = Notification.Name("dsmMusicLibraryDidChange")
+}
+
 struct MusicPlaylist: Identifiable, Codable, Hashable {
     var id: UUID = UUID()
     var name: String
