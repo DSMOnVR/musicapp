@@ -13,7 +13,7 @@ struct AudioDocumentPicker: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
         let picker = UIDocumentPickerViewController(
             forOpeningContentTypes: [.audio],
-            asCopy: false
+            asCopy: true
         )
 
         picker.allowsMultipleSelection = true
@@ -29,6 +29,7 @@ struct AudioDocumentPicker: UIViewControllerRepresentable {
 
     final class Coordinator: NSObject, UIDocumentPickerDelegate {
         let onCompletion: (Result<[URL], Error>) -> Void
+        private var finished = false
 
         init(onCompletion: @escaping (Result<[URL], Error>) -> Void) {
             self.onCompletion = onCompletion
@@ -38,12 +39,20 @@ struct AudioDocumentPicker: UIViewControllerRepresentable {
             _ controller: UIDocumentPickerViewController,
             didPickDocumentsAt urls: [URL]
         ) {
-            onCompletion(.success(urls))
+            guard !finished else { return }
+            finished = true
+
+            controller.dismiss(animated: true) {
+                self.onCompletion(.success(urls))
+            }
         }
 
         func documentPickerWasCancelled(
             _ controller: UIDocumentPickerViewController
         ) {
+            guard !finished else { return }
+            finished = true
+
             onCompletion(.success([]))
         }
     }
