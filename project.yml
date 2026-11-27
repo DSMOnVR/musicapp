@@ -1,4 +1,8 @@
 name: MusicApp
+packages:
+  GoogleSignIn:
+    url: https://github.com/google/GoogleSignIn-iOS
+    from: 7.1.0
 options:
   deploymentTarget:
     iOS: "17.0"
@@ -8,6 +12,8 @@ targets:
     platform: iOS
     sources: [Sources]
     dependencies:
+      - package: GoogleSignIn
+        product: GoogleSignIn
       - target: MusicWidget
         embed: true
     settings:
@@ -22,7 +28,11 @@ targets:
     info:
       path: Sources/Info.plist
       properties:
-        CFBundleDisplayName: MusicApp
+        CFBundleDisplayName: DSM Music
+        GIDClientID: 1085184799984-a0h55etclaaufp26mmdak4fhfi8e7nie.apps.googleusercontent.com
+        CFBundleURLTypes:
+          - CFBundleURLSchemes:
+              - com.googleusercontent.apps.1085184799984-a0h55etclaaufp26mmdak4fhfi8e7nie
         UIBackgroundModes: [audio]
         UILaunchScreen: {}
         UIFileSharingEnabled: true
