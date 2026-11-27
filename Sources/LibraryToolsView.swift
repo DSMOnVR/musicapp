@@ -318,7 +318,7 @@ struct ListeningHistoryCalendarView: View {
         guard let range = calendar.range(of: .day, in: .month, for: displayedMonth),
               let first = calendar.date(from: calendar.dateComponents([.year, .month], from: displayedMonth)) else { return [] }
         let weekdayOffset = (calendar.component(.weekday, from: first) + 5) % 7
-        return Array(repeating: nil, count: weekdayOffset) + range.compactMap { calendar.date(byAdding: .day, value: $0 - 1, to: first) as Date? }
+        return Array(repeating: nil, count: weekdayOffset) + range.map { calendar.date(byAdding: .day, value: $0 - 1, to: first)! }
     }
 
     private func count(for date: Date) -> Int {
@@ -340,7 +340,7 @@ struct ListeningHistoryCalendarView: View {
                 .padding(.horizontal, 8)
 
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 7), spacing: 10) {
-                    ForEach(["M", "T", "W", "T", "F", "S", "S"], id: \.self + UUID().uuidString) { day in
+                    ForEach(Array(["M", "T", "W", "T", "F", "S", "S"].enumerated()), id: \.offset) { _, day in
                         Text(day).font(.caption.bold()).foregroundStyle(.secondary).frame(maxWidth: .infinity)
                     }
                     ForEach(Array(monthDays.enumerated()), id: \.offset) { _, date in
@@ -361,21 +361,21 @@ struct ListeningHistoryCalendarView: View {
 
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Daily listening").font(.headline)
-                    let entries = library.dailyPlayCounts
-                        .compactMap { key, value -> (Date, Int)? in
+                    let entries: [(date: Date, plays: Int)] = library.dailyPlayCounts
+                        .compactMap { key, value in
                             guard let date = LibraryStore.historyDateFormatter.date(from: key) else { return nil }
-                            return (date, value)
+                            return (date: date, plays: value)
                         }
-                        .filter { Calendar.current.isDate($0.0, equalTo: displayedMonth, toGranularity: .month) }
-                        .sorted { $0.0 > $1.0 }
+                        .filter { Calendar.current.isDate($0.date, equalTo: displayedMonth, toGranularity: .month) }
+                        .sorted { $0.date > $1.date }
                     if entries.isEmpty {
                         Text("No listening history for this month yet.").font(.subheadline).foregroundStyle(.secondary)
                     } else {
-                        ForEach(entries, id: \.0) { date, plays in
+                        ForEach(entries, id: \.date) { entry in
                             HStack {
-                                Text(date.formatted(date: .abbreviated, time: .omitted))
+                                Text(entry.date.formatted(date: .abbreviated, time: .omitted))
                                 Spacer()
-                                Text("\(plays) plays").foregroundStyle(.secondary)
+                                Text("\(entry.plays) plays").foregroundStyle(.secondary)
                             }.font(.subheadline)
                         }
                     }
