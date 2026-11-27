@@ -18,6 +18,10 @@ enum LyricsService {
               !artist.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               let url = searchURL(title: title, artist: artist, album: album) else { return nil }
 
+        if let richerLyrics = await fetchWordTimedLyrics(title: title, artist: artist, album: album, duration: duration) {
+            return richerLyrics
+        }
+
         do {
             var request = URLRequest(url: url)
             request.timeoutInterval = 18
@@ -61,6 +65,77 @@ enum LyricsService {
         } catch {
             return nil
         }
+    }
+
+    /// Uses a multi-provider lyrics service first so songs can receive native
+    /// word-level timestamps when a provider has them. Falls back to LRCLIB below.
+    private static func fetchWordTimedLyrics(title: String, artist: String, album: String?, duration: TimeInterval?) async -> String? {
+        var components = URLComponents(string: "https://api.liriqo-alfarrizi.my.id/v1/lyrics")
+        var items = [
+            URLQueryItem(name: "title", value: title),
+            URLQueryItem(name: "artist", value: artist)
+        ]
+        if let duration, duration > 0 {
+            items.append(URLQueryItem(name: "duration", value: String(Int(duration.rounded()))))
+        }
+        if let album, !album.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            items.append(URLQueryItem(name: "album", value: album))
+        }
+        components?.queryItems = items
+        guard let endpoint = components?.url else { return nil }
+
+        do {
+            var request = URLRequest(url: endpoint)
+            request.timeoutInterval = 15
+            request.setValue("application/json", forHTTPHeaderField: "Accept")
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200,
+                  let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let primary = root["primary"] as? [String: Any],
+                  let lines = primary["timed"] as? [[String: Any]],
+                  !lines.isEmpty else { return nil }
+
+            var output: [String] = []
+            for line in lines {
+                guard let lineStart = number(line["start"]) else { continue }
+                let lineText = (line["text"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                let prefix = "[\(lrcTimestamp(lineStart))]"
+                let words = line["words"] as? [[String: Any]] ?? []
+                if !words.isEmpty {
+                    let timedWords = words.compactMap { word -> String? in
+                        guard let start = number(word["start"]),
+                              let text = word["text"] as? String,
+                              !text.isEmpty else { return nil }
+                        return "<\(lrcTimestamp(start))>\(text)"
+                    }
+                    if !timedWords.isEmpty {
+                        output.append(prefix + timedWords.joined())
+                        continue
+                    }
+                }
+                if !lineText.isEmpty {
+                    output.append(prefix + lineText)
+                }
+            }
+            let result = output.joined(separator: "\n")
+            return result.isEmpty ? nil : result
+        } catch {
+            return nil
+        }
+    }
+
+    private static func number(_ value: Any?) -> Double? {
+        if let number = value as? NSNumber { return number.doubleValue }
+        if let string = value as? String { return Double(string) }
+        return nil
+    }
+
+    /// LiriQo returns absolute timestamps in milliseconds; Enhanced LRC uses mm:ss.mmm.
+    private static func lrcTimestamp(_ milliseconds: Double) -> String {
+        let totalSeconds = max(milliseconds, 0) / 1000
+        let minutes = Int(totalSeconds / 60)
+        let seconds = totalSeconds - Double(minutes * 60)
+        return String(format: "%02d:%06.3f", minutes, seconds)
     }
 
     private static func searchURL(title: String, artist: String, album: String?) -> URL? {
