@@ -129,9 +129,6 @@ struct QueueSheet: View {
 struct LyricsSheet: View {
     @Environment(PlayerEngine.self) private var engine
     @Environment(LibraryStore.self) private var library
-    @State private var showFileImporter = false
-    @State private var showFolderImporter = false
-    @State private var importError: String?
 
     private var track: Track? {
         guard let playing = engine.currentTrack else { return nil }
@@ -189,13 +186,13 @@ struct LyricsSheet: View {
                         case .searching:
                             ProgressView().tint(ThemeAccent.color)
                             Text("Searching LRCLIB…").font(.headline)
-                            Text("You can import a lyrics file or a folder while the search runs.")
+                            Text("Lyrics will be saved automatically when found.")
                                 .font(.caption).foregroundStyle(Theme.muted)
                         case .notFound:
                             ContentUnavailableView(
                                 "Lyrics not found",
                                 systemImage: "quote.bubble",
-                                description: Text("No lyrics were found for this song. Try again or import an .lrc or .txt file.")
+                                description: Text("No lyrics were found for this song. Try searching again later.")
                             )
                             Button {
                                 library.retryLyrics(for: track)
@@ -210,43 +207,14 @@ struct LyricsSheet: View {
                         Spacer(minLength: 8)
                     }
 
-                    if let importError {
-                        Text(importError).font(.caption).foregroundStyle(.red)
-                    }
 
-                    VStack(spacing: 10) {
-                        Button { showFileImporter = true } label: {
-                            Label("Choose lyrics file (.lrc or .txt)", systemImage: "doc.badge.plus")
-                                .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.borderedProminent).tint(ThemeAccent.color)
-
-                        Button { showFolderImporter = true } label: {
-                            Label("Choose folder containing lyrics", systemImage: "folder")
-                                .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.bordered)
-                    }
                 } else {
                     ContentUnavailableView("Nothing playing", systemImage: "music.note")
                 }
             }
             .padding(24).foregroundStyle(.white).background(Theme.bg.ignoresSafeArea())
             .navigationTitle("Lyrics").navigationBarTitleDisplayMode(.inline)
-            .sheet(isPresented: $showFileImporter) {
-                LyricsDocumentPicker { result in
-                    showFileImporter = false
-                    importSelectedFile(result)
-                }
-                .ignoresSafeArea()
-            }
-            .fileImporter(
-                isPresented: $showFolderImporter,
-                allowedContentTypes: [.folder],
-                allowsMultipleSelection: false
-            ) { result in
-                importSelectedFolder(result)
-            }
+
         }
         .task(id: track?.id) {
             if let track { library.fetchLyricsIfNeeded(for: track) }
@@ -254,67 +222,5 @@ struct LyricsSheet: View {
         .presentationDetents([.large])
     }
 
-    private func importSelectedFile(_ result: Result<URL, Error>) {
-        do {
-            let url = try result.get()
-            guard let track else {
-                importError = "No song is currently selected."
-                return
-            }
-            let ext = url.pathExtension.lowercased()
-            guard ext == "lrc" || ext == "txt" else {
-                importError = "Please choose an .lrc or .txt lyrics file."
-                return
-            }
-            let data = try Data(contentsOf: url)
-            saveLyrics(data, track: track)
-        } catch is CancellationError {
-            // The user closed the picker without selecting a file.
-        } catch {
-            importError = "Couldn't import that file: \(error.localizedDescription)"
-        }
-    }
 
-    private func importSelectedFolder(_ result: Result<[URL], Error>) {
-        do {
-            guard let folder = try result.get().first, let track else { return }
-            let access = folder.startAccessingSecurityScopedResource()
-            defer { if access { folder.stopAccessingSecurityScopedResource() } }
-
-            guard let enumerator = FileManager.default.enumerator(
-                at: folder,
-                includingPropertiesForKeys: [.isRegularFileKey],
-                options: [.skipsHiddenFiles]
-            ) else {
-                throw NSError(domain: "LyricsImport", code: 3, userInfo: [NSLocalizedDescriptionKey: "Couldn't open that folder."])
-            }
-
-            var candidates: [URL] = []
-            for case let url as URL in enumerator {
-                let ext = url.pathExtension.lowercased()
-                if ext == "lrc" || ext == "txt" { candidates.append(url) }
-            }
-            guard let selected = candidates.first(where: { $0.pathExtension.lowercased() == "lrc" })
-                    ?? candidates.first else {
-                throw NSError(domain: "LyricsImport", code: 4, userInfo: [NSLocalizedDescriptionKey: "No .lrc or .txt files were found in that folder."])
-            }
-            let data = try Data(contentsOf: selected)
-            saveLyrics(data, track: track)
-        } catch {
-            importError = "Couldn't import lyrics from that folder: \(error.localizedDescription)"
-        }
-    }
-
-    private func saveLyrics(_ data: Data, track: Track) {
-        let decoded = String(data: data, encoding: .utf8)
-            ?? String(data: data, encoding: .utf16)
-            ?? String(data: data, encoding: .isoLatin1)
-        guard let text = decoded,
-              !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            importError = "That file is empty or isn't a readable text lyrics file."
-            return
-        }
-        library.updateLyrics(for: track, text: text)
-        importError = nil
-    }
 }
