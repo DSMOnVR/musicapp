@@ -197,34 +197,67 @@ private struct NowPlayingWaveform: View {
 
 struct QueueSheet: View {
     @Environment(PlayerEngine.self) private var engine
+    @Environment(\.dismiss) private var dismiss
+
     var body: some View {
         NavigationStack {
             List {
-                ForEach(engine.queue.indices, id: \.self) { index in
-                    let track = engine.queue[index]
-                    Button { engine.play(index: index) } label: {
-                        HStack {
-                            VStack(alignment: .leading) {
-                                Text(track.title)
-                                Text(track.artist).font(.caption).foregroundStyle(.secondary)
+                if let current = engine.currentTrack {
+                    Section("Now Playing") {
+                        HStack(spacing: 12) {
+                            Image(systemName: "waveform").foregroundStyle(ThemeAccent.color)
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(current.title).font(.headline)
+                                Text(current.artist).font(.caption).foregroundStyle(.secondary)
                             }
                             Spacer()
-                            if index == engine.currentIndex {
-                                Image(systemName: "waveform").foregroundStyle(ThemeAccent.color)
-                            }
-                        }
-                    }
-                    .swipeActions {
-                        Button(role: .destructive) { engine.removeQueueItem(at: index) } label: {
-                            Label("Remove", systemImage: "trash")
+                            Text("PLAYING").font(.caption2.bold()).tracking(1).foregroundStyle(ThemeAccent.color)
                         }
                     }
                 }
-                .onMove(perform: engine.moveQueueItem)
+                Section("Up Next · \(engine.currentIndex.map { max(engine.queue.count - $0 - 1, 0) } ?? engine.queue.count) songs") {
+                    ForEach(Array(engine.queue.enumerated()), id: \.element.id) { index, track in
+                        if index != engine.currentIndex {
+                            Button { engine.play(index: index) } label: {
+                                HStack(spacing: 12) {
+                                    Text("\(index + 1)").font(.caption.monospacedDigit()).foregroundStyle(.secondary).frame(width: 22)
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text(track.title).foregroundStyle(.primary).lineLimit(1)
+                                        Text(track.artist).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                                    }
+                                    Spacer()
+                                    if index == engine.currentIndex {
+                                        Image(systemName: "waveform").foregroundStyle(ThemeAccent.color)
+                                    }
+                                }
+                            }
+                            .swipeActions {
+                                Button(role: .destructive) { engine.removeQueueItem(at: index) } label: {
+                                    Label("Remove", systemImage: "trash")
+                                }
+                            }
+                        }
+                    }
+                    .onMove(perform: engine.moveQueueItem)
+                }
             }
             .environment(\.editMode, .constant(.active))
-            .navigationTitle("Up Next")
-            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { } } }
+            .navigationTitle("Queue")
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Menu {
+                        Button("Shuffle upcoming", systemImage: "shuffle") { engine.shuffleUpcoming() }
+                            .disabled(engine.queue.count - (engine.currentIndex ?? -1) <= 2)
+                        Button("Clear upcoming", systemImage: "trash", role: .destructive) { engine.clearUpcoming() }
+                            .disabled(engine.queue.count <= 1)
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }
+                }
+            }
         }
         .presentationDetents([.medium, .large])
     }
