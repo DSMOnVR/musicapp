@@ -36,8 +36,8 @@ final class LibraryStore {
         loadSavedLibrary()
     }
 
-    var artists: [String] { Array(Set(tracks.map(\\.artist))).sorted() }
-    var albums: [String] { Array(Set(tracks.map(\\.album))).sorted() }
+    var artists: [String] { Array(Set(tracks.map(\.artist))).sorted() }
+    var albums: [String] { Array(Set(tracks.map(\.album))).sorted() }
     var likedTracks: [Track] { tracks.filter { likedIDs.contains($0.id) } }
     var mostPlayed: [Track] { tracks.sorted { (playCounts[$0.id] ?? 0) > (playCounts[$1.id] ?? 0) } }
 
@@ -46,7 +46,7 @@ final class LibraryStore {
         let additions = newTracks.filter { !existing.contains($0.url.standardizedFileURL.path) }
         tracks.append(contentsOf: additions)
         saveLibrary()
-        lastImportMessage = additions.isEmpty ? "These songs are already in your library." : "Added \\(additions.count) song\\(additions.count == 1 ? "" : "s")."
+        lastImportMessage = additions.isEmpty ? "These songs are already in your library." : "Added \(additions.count) song\(additions.count == 1 ? "" : "s")."
         additions.forEach { fetchLyricsIfNeeded(for: $0) }
     }
 
@@ -136,7 +136,7 @@ final class LibraryStore {
         let backup = try JSONDecoder().decode(LibraryBackup.self, from: data)
         let validTracks = backup.tracks.filter { FileManager.default.fileExists(atPath: $0.url.path) }
         tracks = validTracks
-        let ids = Set(validTracks.map(\\.id))
+        let ids = Set(validTracks.map(\.id))
         likedIDs = backup.likedIDs.intersection(ids)
         playlists = backup.playlists.map { playlist in
             var copy = playlist
