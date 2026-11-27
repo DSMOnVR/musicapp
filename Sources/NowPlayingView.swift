@@ -99,6 +99,10 @@ struct LyricsSheet: View {
 
     private var track: Track? { engine.currentTrack }
     private var lyrics: String { track?.lyrics ?? "" }
+    private var timedLines: [TimedLyricLine] { LyricsParser.lines(from: lyrics) }
+    private var activeLineID: Int? {
+        timedLines.last(where: { $0.time <= engine.currentTime })?.id ?? timedLines.first?.id
+    }
 
     var body: some View {
         NavigationStack {
@@ -106,12 +110,37 @@ struct LyricsSheet: View {
                 if let track {
                     Text(track.title).font(.title2.bold())
                     Text(track.artist).foregroundStyle(Theme.muted)
-                    if lyrics.isEmpty {
+
+                    if !timedLines.isEmpty {
+                        ScrollViewReader { proxy in
+                            ScrollView {
+                                LazyVStack(alignment: .leading, spacing: 18) {
+                                    ForEach(timedLines) { line in
+                                        Text(line.text.isEmpty ? "♪" : line.text)
+                                            .font(.system(size: 22, weight: activeLineID == line.id ? .bold : .semibold))
+                                            .foregroundStyle(activeLineID == line.id ? ThemeAccent.color : .white.opacity(0.48))
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                            .id(line.id)
+                                    }
+                                }
+                                .padding(.vertical, 16)
+                            }
+                            .onAppear {
+                                if let activeLineID { proxy.scrollTo(activeLineID, anchor: .center) }
+                            }
+                            .onChange(of: activeLineID) { nextID in
+                                guard let nextID else { return }
+                                withAnimation(.easeInOut(duration: 0.25)) {
+                                    proxy.scrollTo(nextID, anchor: .center)
+                                }
+                            }
+                        }
+                    } else if lyrics.isEmpty {
                         Spacer()
                         ContentUnavailableView(
-                            "No lyrics saved",
+                            "Finding lyrics…",
                             systemImage: "quote.bubble",
-                            description: Text("This song has no embedded lyrics. Import a .txt or .lrc lyrics file to keep them available offline.")
+                            description: Text("DSM Music is checking Lyricsify. If lyrics are found, they’ll be saved for offline playback. You can also import an .lrc or .txt file.")
                         )
                         Spacer()
                     } else {
@@ -123,6 +152,7 @@ struct LyricsSheet: View {
                                 .padding(.vertical, 12)
                         }
                     }
+
                     if let importError {
                         Text(importError).font(.caption).foregroundStyle(.red)
                     }
@@ -166,6 +196,9 @@ struct LyricsSheet: View {
                     importError = error.localizedDescription
                 }
             }
+        }
+        .task(id: track?.id) {
+            if let track { library.fetchLyricsIfNeeded(for: track) }
         }
         .presentationDetents([.medium, .large])
     }
