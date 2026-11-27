@@ -29,6 +29,9 @@ jobs:
             rm MusicApp.zip
           fi
 
+      - name: Generate app icon assets
+        run: swift Scripts/GenerateAppIcons.swift
+
       - name: Commit and push files
         run: |
           git config user.name "github-actions"
