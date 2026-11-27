@@ -22,10 +22,19 @@ struct PersonalLibraryToolsView: View {
     @State private var errorMessage: String?
     @State private var playlistName = ""
     @State private var confirmDuplicateRemoval = false
+    @State private var showHistoryCalendar = false
 
     var body: some View {
         NavigationStack {
             List {
+                Section("Listening history") {
+                    Button { showHistoryCalendar = true } label: {
+                        Label("Open listening calendar", systemImage: "calendar")
+                    }
+                    if let latest = library.dailyPlayCounts.max(by: { $0.key < $1.key }) {
+                        LabeledContent("Most active day", value: "\(latest.key) · \(latest.value) plays")
+                    }
+                }
                 Section("Listening statistics") {
                     LabeledContent("Songs in library", value: "\(library.tracks.count)")
                     LabeledContent("Artists", value: "\(library.artists.count)")
@@ -94,6 +103,9 @@ struct PersonalLibraryToolsView: View {
                 Button("Cancel", role: .cancel) { }
             } message: {
                 Text("The copy with the most plays is kept. Other matching copies are removed from your library.")
+            }
+            .sheet(isPresented: $showHistoryCalendar) {
+                ListeningHistoryCalendarView().environment(library)
             }
             .navigationTitle("Your Music")
             .navigationBarTitleDisplayMode(.inline)
@@ -291,6 +303,95 @@ struct TrackMetadataEditor: View {
             // The user cancelled the document picker.
         } catch {
             lyricsMessage = "Couldn't import lyrics: \\(error.localizedDescription)"
+        }
+    }
+}
+
+
+struct ListeningHistoryCalendarView: View {
+    @Environment(LibraryStore.self) private var library
+    @Environment(\.dismiss) private var dismiss
+    @State private var displayedMonth = Calendar.current.date(from: Calendar.current.dateComponents([.year, .month], from: .now)) ?? .now
+
+    private var monthDays: [Date?] {
+        let calendar = Calendar.current
+        guard let range = calendar.range(of: .day, in: .month, for: displayedMonth),
+              let first = calendar.date(from: calendar.dateComponents([.year, .month], from: displayedMonth)) else { return [] }
+        let weekdayOffset = (calendar.component(.weekday, from: first) + 5) % 7
+        return Array(repeating: nil, count: weekdayOffset) + range.compactMap { calendar.date(byAdding: .day, value: $0 - 1, to: first) as Date? }
+    }
+
+    private func count(for date: Date) -> Int {
+        library.dailyPlayCounts[LibraryStore.historyDateFormatter.string(from: date)] ?? 0
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 20) {
+                HStack {
+                    Button { changeMonth(-1) } label: { Image(systemName: "chevron.left") }
+                    Spacer()
+                    Text(displayedMonth.formatted(.dateTime.month(.wide).year())).font(.headline)
+                    Spacer()
+                    Button { changeMonth(1) } label: { Image(systemName: "chevron.right") }
+                        .disabled(Calendar.current.isDate(displayedMonth, equalTo: .now, toGranularity: .month))
+                }
+                .font(.title3)
+                .padding(.horizontal, 8)
+
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 7), spacing: 10) {
+                    ForEach(["M", "T", "W", "T", "F", "S", "S"], id: \.self + UUID().uuidString) { day in
+                        Text(day).font(.caption.bold()).foregroundStyle(.secondary).frame(maxWidth: .infinity)
+                    }
+                    ForEach(Array(monthDays.enumerated()), id: \.offset) { _, date in
+                        if let date {
+                            let plays = count(for: date)
+                            VStack(spacing: 4) {
+                                Text(date.formatted(.dateTime.day())).font(.subheadline.weight(plays > 0 ? .bold : .regular))
+                                Circle().fill(plays == 0 ? Color.clear : ThemeAccent.color.opacity(min(0.25 + Double(plays) * 0.12, 1)))
+                                    .frame(width: 7, height: 7)
+                            }
+                            .frame(maxWidth: .infinity, minHeight: 42)
+                            .background(Calendar.current.isDateInToday(date) ? Theme.card : .clear, in: RoundedRectangle(cornerRadius: 10))
+                        } else {
+                            Color.clear.frame(height: 42)
+                        }
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Daily listening").font(.headline)
+                    let entries = library.dailyPlayCounts
+                        .compactMap { key, value -> (Date, Int)? in
+                            guard let date = LibraryStore.historyDateFormatter.date(from: key) else { return nil }
+                            return (date, value)
+                        }
+                        .filter { Calendar.current.isDate($0.0, equalTo: displayedMonth, toGranularity: .month) }
+                        .sorted { $0.0 > $1.0 }
+                    if entries.isEmpty {
+                        Text("No listening history for this month yet.").font(.subheadline).foregroundStyle(.secondary)
+                    } else {
+                        ForEach(entries, id: \.0) { date, plays in
+                            HStack {
+                                Text(date.formatted(date: .abbreviated, time: .omitted))
+                                Spacer()
+                                Text("\(plays) plays").foregroundStyle(.secondary)
+                            }.font(.subheadline)
+                        }
+                    }
+                }
+                Spacer()
+            }
+            .padding(20)
+            .navigationTitle("Listening History")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
+        }
+    }
+
+    private func changeMonth(_ offset: Int) {
+        if let next = Calendar.current.date(byAdding: .month, value: offset, to: displayedMonth) {
+            displayedMonth = next
         }
     }
 }
