@@ -130,7 +130,6 @@ struct LyricsSheet: View {
     @Environment(PlayerEngine.self) private var engine
     @Environment(LibraryStore.self) private var library
     @Environment(AppTheme.self) private var appTheme
-    @State private var syncOffset: TimeInterval = 0
 
     private var track: Track? {
         guard let playing = engine.currentTrack else { return nil }
@@ -138,7 +137,7 @@ struct LyricsSheet: View {
     }
     private var lyrics: String { track?.lyrics ?? "" }
     private var timedLines: [TimedLyricLine] { LyricsParser.lines(from: lyrics) }
-    private var lyricTime: TimeInterval { max(0, engine.currentTime + syncOffset) }
+    private var lyricTime: TimeInterval { engine.currentTime }
     private var activeIndex: Int? {
         timedLines.lastIndex(where: { $0.time <= lyricTime })
     }
@@ -167,47 +166,12 @@ struct LyricsSheet: View {
             return result
         }
 
-        let words = line.text.split(whereSeparator: \.isWhitespace)
-        let nextTime = index + 1 < timedLines.count ? timedLines[index + 1].time : line.time + 4.0
-        let lineDuration = max(nextTime - line.time, 0.8)
-        let progress = isActiveLine ? min(max((lyricTime - line.time) / lineDuration, 0), 0.999) : 0
-        let activeWord = isActiveLine && !words.isEmpty
-            ? min(Int(progress * Double(words.count)), words.count - 1)
-            : -1
-
-        for (wordIndex, word) in words.enumerated() {
-            var part = AttributedString(String(word))
-            part.foregroundColor = wordIndex == activeWord
-                ? appTheme.accent
-                : .white.opacity(0.38)
-            result.append(part)
-            if wordIndex < words.count - 1 { result.append(AttributedString(" ")) }
-        }
+        // Standard LRC provides line timestamps only. Highlight the active
+        // line instead of guessing word timings that can drift out of sync.
+        var part = AttributedString(line.text)
+        part.foregroundColor = isActiveLine ? appTheme.accent : .white.opacity(0.38)
+        result.append(part)
         return result
-    }
-
-    private var syncControls: some View {
-        HStack(spacing: 12) {
-            Button { syncOffset = max(syncOffset - 0.25, -5) } label: {
-                Image(systemName: "minus").font(.caption.bold()).frame(width: 30, height: 30)
-                    .background(.white.opacity(0.10), in: Circle())
-            }
-            VStack(spacing: 2) {
-                Text("LYRIC SYNC").font(.caption2.weight(.bold)).tracking(1.2)
-                Text(String(format: "%+.2f sec", syncOffset)).font(.caption.monospacedDigit()).foregroundStyle(.white.opacity(0.75))
-            }
-            Button { syncOffset = min(syncOffset + 0.25, 5) } label: {
-                Image(systemName: "plus").font(.caption.bold()).frame(width: 30, height: 30)
-                    .background(.white.opacity(0.10), in: Circle())
-            }
-            Button("Reset") { syncOffset = 0 }.font(.caption.weight(.semibold))
-                .disabled(syncOffset == 0).opacity(syncOffset == 0 ? 0.35 : 1)
-        }
-        .buttonStyle(.plain).foregroundStyle(.white)
-        .padding(.horizontal, 16).padding(.vertical, 9)
-        .background(.ultraThinMaterial, in: Capsule())
-        .overlay(Capsule().stroke(.white.opacity(0.12), lineWidth: 1))
-        .padding(.bottom, 12)
     }
 
     var body: some View {
@@ -306,17 +270,6 @@ struct LyricsSheet: View {
                     }
                 } else {
                     ContentUnavailableView("Nothing playing", systemImage: "music.note")
-                }
-            }
-            .safeAreaInset(edge: .bottom) {
-                VStack(spacing: 8) {
-                    HStack(spacing: 8) {
-                        Image(systemName: "waveform")
-                        Text(hasWordSyncedLyrics ? "WORD-SYNCED LYRICS" : "ESTIMATED WORD TIMING")
-                            .font(.caption2.weight(.bold)).tracking(1.2)
-                    }
-                    .foregroundStyle(.white.opacity(0.68))
-                    syncControls
                 }
             }
             .navigationTitle("Lyrics")
