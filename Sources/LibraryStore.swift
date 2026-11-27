@@ -451,7 +451,7 @@ final class LibraryStore {
 
     func restoreFromGoogleDrive(tracks restoredTracks: [Track], likedIDs restoredLikes: Set<UUID>, playlists restoredPlaylists: [MusicPlaylist], playCounts restoredPlayCounts: [UUID: Int], listeningSeconds restoredListeningSeconds: TimeInterval, dailyPlayCounts restoredDailyCounts: [String: Int]) throws {
         tracks = restoredTracks
-        let ids = Set(restoredTracks.map(\\.id))
+        let ids = Set(restoredTracks.map(\.id))
         likedIDs = restoredLikes.intersection(ids)
         playlists = restoredPlaylists.map { playlist in var copy = playlist; copy.trackIDs = copy.trackIDs.filter { ids.contains($0) }; return copy }
         playCounts = restoredPlayCounts.filter { ids.contains($0.key) }
