@@ -13,12 +13,27 @@ struct LibraryBackupDocument: FileDocument {
     }
 }
 
+/// Folder backup document containing the library manifest and copied audio files.
+struct FullLibraryBackupDocument: FileDocument {
+    static var readableContentTypes: [UTType] { [.folder] }
+    var root: FileWrapper
+    init(root: FileWrapper) { self.root = root }
+    init(configuration: ReadConfiguration) throws {
+        guard configuration.file.isDirectory else { throw CocoaError(.fileReadCorruptFile) }
+        root = configuration.file
+    }
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper { root }
+}
+
 struct PersonalLibraryToolsView: View {
     @Environment(LibraryStore.self) private var library
     @Environment(\.dismiss) private var dismiss
     @State private var exportDocument: LibraryBackupDocument?
+    @State private var fullBackupDocument: FullLibraryBackupDocument?
     @State private var showExporter = false
     @State private var showImporter = false
+    @State private var showFullBackupExporter = false
+    @State private var showFullBackupImporter = false
     @State private var errorMessage: String?
     @State private var playlistName = ""
     @State private var confirmDuplicateRemoval = false
@@ -100,6 +115,16 @@ struct PersonalLibraryToolsView: View {
                         }
                     }
                 }
+                Section("Full music backup — survives reinstall") {
+                    Button { prepareFullBackup() } label: {
+                        Label("Export songs + library to Files", systemImage: "externaldrive.badge.arrow.up")
+                    }
+                    Button { showFullBackupImporter = true } label: {
+                        Label("Restore full music backup", systemImage: "externaldrive.badge.arrow.down")
+                    }
+                    Text("Includes your actual audio files, playlists, likes, lyrics, artwork, and listening history. Save the exported DSM Music Backup folder in iCloud Drive or another safe Files location before deleting or reinstalling the app. After reinstalling, choose that folder here to restore everything.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
                 Section("Backup & restore") {
                     Label("Automatic local backup is enabled", systemImage: "checkmark.icloud")
                     Text("DSM Music keeps a second copy of your library database in its private app storage whenever your library is saved. This backup does not include the audio files.")
@@ -130,6 +155,24 @@ struct PersonalLibraryToolsView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
             .fileExporter(
+                isPresented: $showFullBackupExporter,
+                document: fullBackupDocument,
+                contentType: .folder,
+                defaultFilename: "DSM Music Backup"
+            ) { result in
+                if case .failure(let error) = result { errorMessage = "Full backup export failed: " + error.localizedDescription }
+                if case .success = result { errorMessage = "Full backup exported. Keep it in iCloud Drive or another safe Files location before reinstalling." }
+            }
+            .fileImporter(isPresented: $showFullBackupImporter, allowedContentTypes: [.folder], allowsMultipleSelection: false) { result in
+                do {
+                    guard let url = try result.get().first else { return }
+                    let access = url.startAccessingSecurityScopedResource()
+                    defer { if access { url.stopAccessingSecurityScopedResource() } }
+                    try library.restoreFullBackup(from: url)
+                    errorMessage = library.lastImportMessage
+                } catch { errorMessage = "Full backup restore failed: " + error.localizedDescription }
+            }
+            .fileExporter(
                 isPresented: $showExporter,
                 document: exportDocument,
                 contentType: .json,
@@ -147,6 +190,14 @@ struct PersonalLibraryToolsView: View {
                 } catch { errorMessage = "Could not restore backup: \(error.localizedDescription)" }
             }
         }
+    }
+
+    private func prepareFullBackup() {
+        do {
+            fullBackupDocument = FullLibraryBackupDocument(root: try library.makeFullBackupFileWrapper())
+            showFullBackupExporter = true
+            errorMessage = nil
+        } catch { errorMessage = "Could not create full backup: " + error.localizedDescription }
     }
 
     private func prepareBackup() {
