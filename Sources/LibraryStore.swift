@@ -26,6 +26,7 @@ struct LibraryBackup: Codable {
 struct PortableLibraryBackup: Codable {
     var version: Int
     var tracks: [Track]
+    var audioPaths: [UUID: String]
     var likedIDs: Set<UUID>
     var playlists: [MusicPlaylist]
     var playCounts: [UUID: Int]
@@ -307,21 +308,22 @@ final class LibraryStore {
 
     /// Creates a portable folder backup containing both the library database and every audio file.
     func makeFullBackupFileWrapper() throws -> FileWrapper {
-        var portableTracks = tracks
+        let portableTracks = tracks
         var audioWrappers: [String: FileWrapper] = [:]
+        var audioPaths: [UUID: String] = [:]
         var missingFiles: [String] = []
 
-        for index in portableTracks.indices {
-            let source = portableTracks[index].url
+        for track in portableTracks {
+            let source = track.url
             guard FileManager.default.fileExists(atPath: source.path) else {
-                missingFiles.append(portableTracks[index].title)
+                missingFiles.append(track.title)
                 continue
             }
             let ext = source.pathExtension.isEmpty ? "audio" : source.pathExtension
-            let filename = "\(portableTracks[index].id.uuidString).\(ext)"
+            let filename = "\(track.id.uuidString).\(ext)"
             let data = try Data(contentsOf: source)
             audioWrappers[filename] = FileWrapper(regularFileWithContents: data)
-            portableTracks[index].url = URL(fileURLWithPath: "Audio/\(filename)")
+            audioPaths[track.id] = "Audio/\(filename)"
         }
 
         if !missingFiles.isEmpty {
@@ -333,6 +335,7 @@ final class LibraryStore {
         let manifest = PortableLibraryBackup(
             version: 1,
             tracks: portableTracks,
+            audioPaths: audioPaths,
             likedIDs: likedIDs,
             playlists: playlists,
             playCounts: playCounts,
@@ -365,7 +368,7 @@ final class LibraryStore {
 
         var restoredTracks: [Track] = []
         for var track in backup.tracks {
-            let relative = track.url.path
+            guard let relative = backup.audioPaths[track.id] else { continue }
             let components = relative.split(separator: "/")
             guard components.count == 2, components[0] == "Audio" else { continue }
             let source = folderURL.appendingPathComponent("Audio", isDirectory: true)
