@@ -12,7 +12,7 @@ enum AlbumArtworkService {
     static func artwork(title: String, artist: String) async -> Data? {
         var components = URLComponents(string: "https://itunes.apple.com/search")
         components?.queryItems = [
-            URLQueryItem(name: "term", value: "\\(artist) \\(title)"),
+            URLQueryItem(name: "term", value: "\(artist) \(title)"),
             URLQueryItem(name: "entity", value: "song"),
             URLQueryItem(name: "limit", value: "5")
         ]
