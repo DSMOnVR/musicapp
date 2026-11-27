@@ -28,6 +28,12 @@ struct HomeView: View {
                         quickCard("Liked Songs", icon: "heart.fill", count: "\(library.likedTracks.count) songs") { engine.setQueue(library.likedTracks) }
                         quickCard("All Music", icon: "music.note", count: "\(library.tracks.count) songs") { engine.setQueue(library.tracks) }
                     }
+                    HStack(spacing: 12) {
+                        quickCard("Listening time", icon: "clock.fill", count: listeningTime) { }
+                        quickCard("Most played", icon: "chart.bar.fill", count: "\(library.mostPlayed.first.map { library.playCounts[$0.id, default: 0] } ?? 0) plays") {
+                            if let top = library.mostPlayed.first { engine.setQueue([top]) }
+                        }
+                    }
                     VStack(alignment: .leading, spacing: 14) {
                         sectionTitle("Recently added")
                         ScrollView(.horizontal, showsIndicators: false) {
