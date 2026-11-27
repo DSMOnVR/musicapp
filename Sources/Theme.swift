@@ -6,7 +6,7 @@ import CoreImage
 @Observable
 final class AppTheme {
     enum Preset: String, CaseIterable, Identifiable {
-        case lime = "Lime", sunset = "Sunset", ocean = "Ocean", mono = "Mono", artwork = "Album art"
+        case lime = "Lime", sunset = "Sunset", ocean = "Ocean", mono = "Mono", artwork = "Album art", rose = "Rose", violet = "Violet", emerald = "Emerald", ice = "Ice", midnight = "Midnight"
         var id: String { rawValue }
         var colors: [Color] {
             switch self {
@@ -15,6 +15,11 @@ final class AppTheme {
             case .ocean: return [Color(red: 0.10, green: 0.77, blue: 0.83), Color(red: 0.10, green: 0.29, blue: 0.62)]
             case .mono: return [Color(white: 0.72), Color(white: 0.34)]
             case .artwork: return [Color(red: 0.78, green: 0.31, blue: 0.77), Color(red: 0.35, green: 0.28, blue: 0.88)]
+            case .rose: return [Color(red: 1.00, green: 0.42, blue: 0.62), Color(red: 0.48, green: 0.12, blue: 0.30)]
+            case .violet: return [Color(red: 0.62, green: 0.42, blue: 1.00), Color(red: 0.20, green: 0.12, blue: 0.48)]
+            case .emerald: return [Color(red: 0.18, green: 0.82, blue: 0.58), Color(red: 0.06, green: 0.30, blue: 0.24)]
+            case .ice: return [Color(red: 0.40, green: 0.82, blue: 1.00), Color(red: 0.14, green: 0.34, blue: 0.62)]
+            case .midnight: return [Color(red: 0.42, green: 0.48, blue: 0.70), Color(red: 0.08, green: 0.09, blue: 0.18)]
             }
         }
     }
