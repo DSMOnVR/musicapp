@@ -1,6 +1,7 @@
 import SwiftUI
 import Observation
 import UIKit
+import CoreImage
 
 @Observable
 final class AppTheme {
@@ -23,6 +24,7 @@ final class AppTheme {
     var appearance = "Dark" { didSet { save() } }
     var reduceMotion = false { didSet { save() } }
     var customAccentHex: String? { didSet { save() } }
+    var artworkAccentHex: String? { didSet { save() } }
     var useCustomAccent = false { didSet { save() } }
 
     var customAccent: Color {
@@ -43,7 +45,28 @@ final class AppTheme {
         }
     }
 
-    var accent: Color { useCustomAccent ? customAccent : preset.colors[0] }
+    var accent: Color {
+        if useArtworkColors, let artworkAccentHex, let value = UInt64(artworkAccentHex, radix: 16) {
+            return Color(red: Double((value >> 16) & 0xff) / 255,
+                         green: Double((value >> 8) & 0xff) / 255,
+                         blue: Double(value & 0xff) / 255)
+        }
+        return useCustomAccent ? customAccent : preset.colors[0]
+    }
+
+    func updateArtworkAccent(from data: Data?) {
+        guard useArtworkColors, let data, let image = CIImage(data: data) else { return }
+        let filter = CIFilter.areaAverage()
+        filter.inputImage = image
+        filter.extent = image.extent
+        guard let output = filter.outputImage else { return }
+        var pixel = [UInt8](repeating: 0, count: 4)
+        let context = CIContext(options: [.workingColorSpace: NSNull()])
+        context.render(output, toBitmap: &pixel, rowBytes: 4,
+                       bounds: CGRect(x: 0, y: 0, width: 1, height: 1),
+                       format: .RGBA8, colorSpace: CGColorSpaceCreateDeviceRGB())
+        artworkAccentHex = String(format: "%02X%02X%02X", pixel[0], pixel[1], pixel[2])
+    }
 
     init() {
         let defaults = UserDefaults.standard
@@ -52,6 +75,7 @@ final class AppTheme {
         appearance = defaults.string(forKey: "dsm.theme.appearance") ?? "Dark"
         reduceMotion = defaults.bool(forKey: "dsm.theme.reduceMotion")
         customAccentHex = defaults.string(forKey: "dsm.theme.customAccent")
+        artworkAccentHex = defaults.string(forKey: "dsm.theme.artworkAccent")
         useCustomAccent = defaults.bool(forKey: "dsm.theme.useCustomAccent")
     }
 
@@ -62,6 +86,7 @@ final class AppTheme {
         defaults.set(appearance, forKey: "dsm.theme.appearance")
         defaults.set(reduceMotion, forKey: "dsm.theme.reduceMotion")
         defaults.set(customAccentHex, forKey: "dsm.theme.customAccent")
+        defaults.set(artworkAccentHex, forKey: "dsm.theme.artworkAccent")
         defaults.set(useCustomAccent, forKey: "dsm.theme.useCustomAccent")
     }
 }
