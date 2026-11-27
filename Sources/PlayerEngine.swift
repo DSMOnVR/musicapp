@@ -26,7 +26,7 @@ final class PlayerEngine {
         configureRemoteCommands()
         observeInterruptions()
         timeObserver = player.addPeriodicTimeObserver(
-            forInterval: CMTime(seconds: 0.25, preferredTimescale: 600), queue: .main
+            forInterval: CMTime(seconds: 0.05, preferredTimescale: 600), queue: .main
         ) { [weak self] time in
             MainActor.assumeIsolated {
                 let t = time.seconds
