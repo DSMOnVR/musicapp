@@ -21,6 +21,7 @@ struct PersonalLibraryToolsView: View {
     @State private var showImporter = false
     @State private var errorMessage: String?
     @State private var playlistName = ""
+    @State private var confirmDuplicateRemoval = false
 
     var body: some View {
         NavigationStack {
@@ -32,6 +33,25 @@ struct PersonalLibraryToolsView: View {
                     LabeledContent("Listening time", value: duration(library.listeningSeconds))
                     if let top = library.mostPlayed.first, (library.playCounts[top.id] ?? 0) > 0 {
                         LabeledContent("Most played", value: "\(top.title) · \(library.playCounts[top.id] ?? 0) plays")
+                    }
+                }
+                Section("Duplicate finder") {
+                    if library.duplicateGroups.isEmpty {
+                        Label("No duplicate songs found", systemImage: "checkmark.circle")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        LabeledContent("Duplicate groups", value: "\(library.duplicateGroups.count)")
+                        LabeledContent("Extra copies", value: "\(library.duplicateGroups.reduce(0) { $0 + $1.count - 1 })")
+                        ForEach(library.duplicateGroups, id: \.first?.id) { group in
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(group[0].title).font(.headline)
+                                Text("\(group[0].artist) · \(group.count) copies")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                        Button(role: .destructive) { confirmDuplicateRemoval = true } label: {
+                            Label("Remove extra copies", systemImage: "trash")
+                        }
                     }
                 }
                 Section("Playlists") {
@@ -68,6 +88,12 @@ struct PersonalLibraryToolsView: View {
                 if let errorMessage {
                     Section { Text(errorMessage).foregroundStyle(.red) }
                 }
+            }
+            .confirmationDialog("Remove duplicate copies?", isPresented: $confirmDuplicateRemoval, titleVisibility: .visible) {
+                Button("Remove duplicates", role: .destructive) { library.removeDuplicateTracks() }
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                Text("The copy with the most plays is kept. Other matching copies are removed from your library.")
             }
             .navigationTitle("Your Music")
             .navigationBarTitleDisplayMode(.inline)
