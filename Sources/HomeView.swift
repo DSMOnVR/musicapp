@@ -90,7 +90,7 @@ struct HomeView: View {
     }
     private var listeningTime: String {
         let minutes = Int(library.listeningSeconds / 60)
-        return minutes >= 60 ? "\\(minutes / 60)h \\(minutes % 60)m" : "\\(minutes)m"
+        return minutes >= 60 ? "\(minutes / 60)h \(minutes % 60)m" : "\(minutes)m"
     }
     private func quickCard(_ title: String, icon: String, count: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
