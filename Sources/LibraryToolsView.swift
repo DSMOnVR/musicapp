@@ -27,6 +27,7 @@ struct FullLibraryBackupDocument: FileDocument {
 
 struct PersonalLibraryToolsView: View {
     @Environment(LibraryStore.self) private var library
+    @Environment(GoogleDriveBackup.self) private var cloudBackup
     @Environment(\.dismiss) private var dismiss
     @State private var exportDocument: LibraryBackupDocument?
     @State private var fullBackupDocument: FullLibraryBackupDocument?
@@ -114,6 +115,32 @@ struct PersonalLibraryToolsView: View {
                             }
                         }
                     }
+                }
+                Section("Google Drive automatic backup") {
+                    Label(cloudBackup.status, systemImage: cloudBackup.isSignedIn ? "checkmark.icloud.fill" : "icloud")
+                    if let email = cloudBackup.accountEmail {
+                        Text("Connected as \(email)").font(.caption).foregroundStyle(.secondary)
+                    }
+                    Button {
+                        Task { await cloudBackup.signIn() }
+                    } label: {
+                        Label(cloudBackup.isSignedIn ? "Reconnect Google account" : "Connect Google Drive", systemImage: "person.crop.circle.badge.checkmark")
+                    }
+                    .disabled(cloudBackup.isWorking)
+                    Button {
+                        Task { await cloudBackup.backupNow(library) }
+                    } label: {
+                        Label("Back up now", systemImage: "icloud.and.arrow.up")
+                    }
+                    .disabled(!cloudBackup.isSignedIn || cloudBackup.isWorking)
+                    Button {
+                        Task { await cloudBackup.restoreFromDrive(library) }
+                    } label: {
+                        Label("Restore from Google Drive", systemImage: "icloud.and.arrow.down")
+                    }
+                    .disabled(!cloudBackup.isSignedIn || cloudBackup.isWorking)
+                    Text("After connecting once, DSM Music automatically backs up library changes while online. Your backup is stored in the private DSM Music app-data area of Google Drive.")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
                 Section("Full music backup — survives reinstall") {
                     Button { prepareFullBackup() } label: {
