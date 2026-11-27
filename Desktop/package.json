@@ -1,0 +1,16 @@
+{
+  "name": "dsm-music",
+  "version": "1.0.0",
+  "description": "DSM Music desktop player for Windows",
+  "main": "main.js",
+  "scripts": { "start": "electron .", "dist:win": "electron-builder --win nsis --x64" },
+  "devDependencies": { "electron": "^35.0.0", "electron-builder": "^26.0.0" },
+  "build": {
+    "appId": "com.dsmonvr.dsmmusic",
+    "productName": "DSM Music",
+    "directories": { "output": "dist" },
+    "files": ["main.js", "preload.js", "index.html", "renderer.js", "styles.css"],
+    "win": { "target": ["nsis"], "artifactName": "DSM-Music-Setup-${version}.${ext}" },
+    "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true, "createDesktopShortcut": true, "createStartMenuShortcut": true }
+  }
+}
