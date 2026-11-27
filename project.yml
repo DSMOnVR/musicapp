@@ -24,6 +24,22 @@ targets:
         UILaunchScreen: {}
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
+        CFBundleIcons:
+          CFBundlePrimaryIcon:
+            CFBundleIconName: AppIcon
+          CFBundleAlternateIcons:
+            DSMMono:
+              CFBundleIconFiles: [DSMMono]
+              CFBundleIconName: DSMMono
+              UIPrerenderedIcon: true
+            DSMBlue:
+              CFBundleIconFiles: [DSMBlue]
+              CFBundleIconName: DSMBlue
+              UIPrerenderedIcon: true
+            DSMPurple:
+              CFBundleIconFiles: [DSMPurple]
+              CFBundleIconName: DSMPurple
+              UIPrerenderedIcon: true
 
   MusicWidget:
     type: app-extension
