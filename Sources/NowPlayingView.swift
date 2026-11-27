@@ -144,14 +144,33 @@ struct LyricsSheet: View {
         activeIndex.map { timedLines[$0].id }
     }
 
+    private var hasWordSyncedLyrics: Bool { timedLines.contains(where: \.hasWordTiming) }
+
     private func highlightedLine(_ line: TimedLyricLine, index: Int) -> AttributedString {
+        var result = AttributedString()
+
+        if line.hasWordTiming {
+            let activeWordIndex = line.words.lastIndex(where: { $0.time <= engine.currentTime })
+            for (wordIndex, word) in line.words.enumerated() {
+                var part = AttributedString(word.text)
+                if let activeWordIndex, wordIndex < activeWordIndex {
+                    part.foregroundColor = .white
+                } else if wordIndex == activeWordIndex {
+                    part.foregroundColor = appTheme.accent
+                } else {
+                    part.foregroundColor = .white.opacity(0.34)
+                }
+                result.append(part)
+            }
+            return result
+        }
+
         let words = line.text.split(separator: " ", omittingEmptySubsequences: false)
         let nextTime = index + 1 < timedLines.count ? timedLines[index + 1].time : line.time + 4.0
         let lineDuration = max(nextTime - line.time, 0.8)
         let progress = min(max((engine.currentTime - line.time) / lineDuration, 0), 0.999)
         let litWord = min(Int(progress * Double(max(words.count, 1))), max(words.count - 1, 0))
 
-        var result = AttributedString()
         for (wordIndex, word) in words.enumerated() {
             var part = AttributedString(String(word))
             if wordIndex < litWord {
@@ -270,7 +289,7 @@ struct LyricsSheet: View {
             .safeAreaInset(edge: .bottom) {
                 HStack(spacing: 10) {
                     Image(systemName: "waveform")
-                    Text("SYNCED LYRICS")
+                    Text(hasWordSyncedLyrics ? "WORD-SYNCED LYRICS" : "SYNCED LYRICS")
                         .font(.caption2.weight(.bold))
                         .tracking(1.5)
                 }
