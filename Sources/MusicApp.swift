@@ -47,8 +47,20 @@ struct RootView: View {
         }
         .background(Theme.bg.ignoresSafeArea())
         .sheet(isPresented: $showNowPlaying) { NowPlayingView().environment(engine).presentationDetents([.large]).presentationDragIndicator(.hidden) }
-        .fileImporter(isPresented: $showImporter, allowedContentTypes: [.audio], allowsMultipleSelection: true) { result in
-            importResult(result)
+        .fileImporter(
+            isPresented: $showImporter,
+            allowedContentTypes: [.audio, .mp3],
+            allowsMultipleSelection: true
+        ) { result in
+            switch result {
+            case .success(let urls):
+                print("Selected files: \(urls)")
+                Task {
+                    await importURLs(urls)
+                }
+            case .failure(let error):
+                library.importErrors = [error.localizedDescription]
+            }
         }
         .fileImporter(isPresented: $showFolderImporter, allowedContentTypes: [.folder], allowsMultipleSelection: false) { result in
             guard case .success(let urls) = result, let folder = urls.first else { return }
