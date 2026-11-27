@@ -80,7 +80,7 @@ final class LibraryStore {
         lyricsFetchStatus[track.id] = .searching
         Task {
             defer { fetchingLyricsIDs.remove(track.id) }
-            guard let lyrics = await LyricsifyService.fetchLyrics(title: track.title, artist: track.artist) else {
+            guard let lyrics = await LyricsService.fetchLyrics(title: track.title, artist: track.artist, album: track.album, duration: track.duration) else {
                 lyricsFetchStatus[track.id] = .notFound
                 return
             }
