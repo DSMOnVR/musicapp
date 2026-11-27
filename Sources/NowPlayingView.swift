@@ -95,7 +95,7 @@ struct QueueSheet: View {
     var body: some View {
         NavigationStack {
             List {
-                ForEach(engine.queue.indices, id: \\.self) { index in
+                ForEach(engine.queue.indices, id: \.self) { index in
                     let track = engine.queue[index]
                     Button { engine.play(index: index) } label: {
                         HStack {
@@ -117,7 +117,7 @@ struct QueueSheet: View {
                 }
                 .onMove(perform: engine.moveQueueItem)
             }
-            .environment(\\.editMode, .constant(.active))
+            .environment(\.editMode, .constant(.active))
             .navigationTitle("Up Next")
             .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { } } }
         }
