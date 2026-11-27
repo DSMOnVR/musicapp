@@ -75,7 +75,12 @@ final class PlayerEngine {
 
     func moveQueueItem(from source: IndexSet, to destination: Int) {
         let oldCurrentID = currentTrack?.id
-        queue.move(fromOffsets: source, toOffset: destination)
+        let moving = source.sorted().compactMap { queue.indices.contains($0) ? queue[$0] : nil }
+        for index in source.sorted(by: >) where queue.indices.contains(index) {
+            queue.remove(at: index)
+        }
+        let adjustedDestination = max(0, min(destination - source.filter { $0 < destination }.count, queue.count))
+        queue.insert(contentsOf: moving, at: adjustedDestination)
         currentIndex = oldCurrentID.flatMap { id in queue.firstIndex(where: { $0.id == id }) }
     }
 
