@@ -15,7 +15,7 @@ struct LibraryBackupDocument: FileDocument {
 
 struct PersonalLibraryToolsView: View {
     @Environment(LibraryStore.self) private var library
-    @Environment(\\.dismiss) private var dismiss
+    @Environment(\.dismiss) private var dismiss
     @State private var exportDocument: LibraryBackupDocument?
     @State private var showExporter = false
     @State private var showImporter = false
@@ -26,12 +26,12 @@ struct PersonalLibraryToolsView: View {
         NavigationStack {
             List {
                 Section("Listening statistics") {
-                    LabeledContent("Songs in library", value: "\\(library.tracks.count)")
-                    LabeledContent("Artists", value: "\\(library.artists.count)")
-                    LabeledContent("Albums", value: "\\(library.albums.count)")
+                    LabeledContent("Songs in library", value: "\(library.tracks.count)")
+                    LabeledContent("Artists", value: "\(library.artists.count)")
+                    LabeledContent("Albums", value: "\(library.albums.count)")
                     LabeledContent("Listening time", value: duration(library.listeningSeconds))
                     if let top = library.mostPlayed.first, (library.playCounts[top.id] ?? 0) > 0 {
-                        LabeledContent("Most played", value: "\\(top.title) · \\(library.playCounts[top.id] ?? 0) plays")
+                        LabeledContent("Most played", value: "\(top.title) · \(library.playCounts[top.id] ?? 0) plays")
                     }
                 }
                 Section("Playlists") {
@@ -46,7 +46,7 @@ struct PersonalLibraryToolsView: View {
                         HStack {
                             VStack(alignment: .leading) {
                                 Text(playlist.name)
-                                Text("\\(library.tracks(in: playlist).count) songs").font(.caption).foregroundStyle(.secondary)
+                                Text("\(library.tracks(in: playlist).count) songs").font(.caption).foregroundStyle(.secondary)
                             }
                             Spacer()
                             Button(role: .destructive) { library.deletePlaylist(playlist) } label: {
@@ -87,7 +87,7 @@ struct PersonalLibraryToolsView: View {
                     defer { if access { url.stopAccessingSecurityScopedResource() } }
                     try library.restoreBackup(from: Data(contentsOf: url))
                     errorMessage = nil
-                } catch { errorMessage = "Could not restore backup: \\(error.localizedDescription)" }
+                } catch { errorMessage = "Could not restore backup: \(error.localizedDescription)" }
             }
         }
     }
@@ -97,17 +97,17 @@ struct PersonalLibraryToolsView: View {
             exportDocument = LibraryBackupDocument(data: try library.makeBackupData())
             showExporter = true
             errorMessage = nil
-        } catch { errorMessage = "Could not create backup: \\(error.localizedDescription)" }
+        } catch { errorMessage = "Could not create backup: \(error.localizedDescription)" }
     }
     private func duration(_ seconds: TimeInterval) -> String {
         let minutes = Int(seconds / 60)
-        return minutes >= 60 ? "\\(minutes / 60) hr \\(minutes % 60) min" : "\\(minutes) min"
+        return minutes >= 60 ? "\(minutes / 60) hr \(minutes % 60) min" : "\(minutes) min"
     }
 }
 
 struct TrackMetadataEditor: View {
     @Environment(LibraryStore.self) private var library
-    @Environment(\\.dismiss) private var dismiss
+    @Environment(\.dismiss) private var dismiss
     let track: Track
     @State private var title: String
     @State private var artist: String
