@@ -22,6 +22,7 @@ struct NowPlayingView: View {
                         Button("Edit song details", systemImage: "pencil") { editingTrack = track }
                     }
                     Button("Sleep timer", systemImage: "moon.zzz") { showSleepTimer = true }
+                    Toggle("Autoplay queue", systemImage: "infinity", isOn: $engine.autoplayEnabled)
                 } label: { Image(systemName: "ellipsis").font(.title3.bold()).foregroundStyle(.white).frame(width: 44, height: 44) }
             }.padding(.top, 8)
             Spacer(minLength: 18)
