@@ -23,7 +23,7 @@ struct LibraryView: View {
             HStack {
                 Text("Library").font(.system(size: 34, weight: .bold))
                 Spacer()
-                Text("\\(library.tracks.count) songs").font(.caption).foregroundStyle(Theme.muted)
+                Text("\(library.tracks.count) songs").font(.caption).foregroundStyle(Theme.muted)
                 Button { showTools = true } label: { Image(systemName: "chart.bar.xaxis").font(.title3).foregroundStyle(ThemeAccent.color).padding(.leading, 8) }
             }
             HStack(spacing: 8) {
@@ -48,7 +48,7 @@ struct LibraryView: View {
                                     ArtworkView(track: track).frame(width: 52, height: 52)
                                     VStack(alignment: .leading, spacing: 4) {
                                         Text(track.title).font(.headline).foregroundStyle(.white).lineLimit(1)
-                                        Text("\\(track.artist) · \\(track.album)").font(.caption).foregroundStyle(Theme.muted).lineLimit(1)
+                                        Text("\(track.artist) · \(track.album)").font(.caption).foregroundStyle(Theme.muted).lineLimit(1)
                                     }
                                     Spacer()
                                     if library.isLiked(track) { Image(systemName: "heart.fill").foregroundStyle(ThemeAccent.color) }
@@ -83,7 +83,7 @@ struct LibraryView: View {
                                 Image(systemName: "music.note.list").font(.title2).foregroundStyle(ThemeAccent.color)
                                 VStack(alignment: .leading) {
                                     Text(playlist.name).foregroundStyle(.white)
-                                    Text("\\(library.tracks(in: playlist).count) songs").font(.caption).foregroundStyle(Theme.muted)
+                                    Text("\(library.tracks(in: playlist).count) songs").font(.caption).foregroundStyle(Theme.muted)
                                 }
                                 Spacer()
                                 Image(systemName: "chevron.right").foregroundStyle(Theme.muted)
@@ -97,7 +97,7 @@ struct LibraryView: View {
                 }.listStyle(.plain).scrollContentBackground(.hidden)
             } else {
                 List {
-                    ForEach(filter == "Albums" ? library.albums : library.artists, id: \\.self) { name in
+                    ForEach(filter == "Albums" ? library.albums : library.artists, id: \.self) { name in
                         Button {
                             let tracks = library.tracks.filter { filter == "Albums" ? $0.album == name : $0.artist == name }
                             engine.setQueue(tracks); onOpenPlayer()
@@ -130,7 +130,7 @@ struct LibraryView: View {
 struct PlaylistDetailView: View {
     @Environment(LibraryStore.self) private var library
     @Environment(PlayerEngine.self) private var engine
-    @Environment(\\.dismiss) private var dismiss
+    @Environment(\.dismiss) private var dismiss
     let playlist: MusicPlaylist
     private var songs: [Track] { library.tracks(in: playlist) }
 
