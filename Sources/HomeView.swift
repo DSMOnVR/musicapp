@@ -6,6 +6,7 @@ struct HomeView: View {
     var onImport: () -> Void
     var onOpenPlayer: () -> Void
     @State private var search = ""
+    @State private var artistPhotos: [String: UIImage] = [:]
     private var recent: [Track] { Array(library.tracks.reversed().prefix(8)) }
     var body: some View {
         ScrollView {
@@ -48,7 +49,16 @@ struct HomeView: View {
                         ForEach(library.artists, id: \.self) { artist in
                             Button { engine.setQueue(library.tracks.filter { $0.artist == artist }) } label: {
                                 HStack(spacing: 12) {
-                                    Circle().fill(LinearGradient(colors: [.purple, .pink], startPoint: .topLeading, endPoint: .bottomTrailing)).frame(width: 48, height: 48).overlay(Image(systemName: "person.fill").foregroundStyle(.white))
+                                    Group {
+                                        if let photo = artistPhotos[artist] {
+                                            Image(uiImage: photo).resizable().scaledToFill()
+                                        } else {
+                                            Circle().fill(LinearGradient(colors: [.purple, .pink], startPoint: .topLeading, endPoint: .bottomTrailing))
+                                                .overlay(Image(systemName: "person.fill").foregroundStyle(.white))
+                                        }
+                                    }
+                                    .frame(width: 48, height: 48)
+                                    .clipShape(Circle())
                                     Text(artist).font(.headline).foregroundStyle(.white)
                                     Spacer(); Image(systemName: "play.fill").foregroundStyle(ThemeAccent.color)
                                 }.padding(10).background(Theme.card, in: RoundedRectangle(cornerRadius: 16))
@@ -57,7 +67,15 @@ struct HomeView: View {
                     }
                 }
             }.padding(.horizontal, 22).padding(.top, 18).padding(.bottom, 20)
-        }.foregroundStyle(.white)
+        }
+        .foregroundStyle(.white)
+        .task(id: library.artists) {
+            for artist in library.artists where artistPhotos[artist] == nil {
+                if let photo = await ArtistImageStore.image(for: artist) {
+                    artistPhotos[artist] = photo
+                }
+            }
+        }
     }
     private func quickCard(_ title: String, icon: String, count: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
