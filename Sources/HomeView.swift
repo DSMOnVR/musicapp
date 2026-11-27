@@ -7,6 +7,7 @@ struct HomeView: View {
     var onOpenPlayer: () -> Void
     @State private var search = ""
     @State private var artistPhotos: [String: UIImage] = [:]
+    @State private var lastStatsSecond = -1
     private var recent: [Track] { Array(library.tracks.reversed().prefix(8)) }
     var body: some View {
         ScrollView {
@@ -69,6 +70,16 @@ struct HomeView: View {
             }.padding(.horizontal, 22).padding(.top, 18).padding(.bottom, 20)
         }
         .foregroundStyle(.white)
+        .onChange(of: engine.currentTrack?.id) { _, _ in
+            if let track = engine.currentTrack { library.recordPlay(track) }
+        }
+        .onChange(of: Int(engine.currentTime)) { _, second in
+            guard engine.isPlaying, second != lastStatsSecond else { return }
+            if lastStatsSecond >= 0 && second > lastStatsSecond {
+                library.addListeningTime(min(Double(second - lastStatsSecond), 1))
+            }
+            lastStatsSecond = second
+        }
         .task(id: library.artists) {
             for artist in library.artists where artistPhotos[artist] == nil {
                 if let photo = await ArtistImageStore.image(for: artist) {
@@ -76,6 +87,10 @@ struct HomeView: View {
                 }
             }
         }
+    }
+    private var listeningTime: String {
+        let minutes = Int(library.listeningSeconds / 60)
+        return minutes >= 60 ? "\\(minutes / 60)h \\(minutes % 60)m" : "\\(minutes)m"
     }
     private func quickCard(_ title: String, icon: String, count: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
