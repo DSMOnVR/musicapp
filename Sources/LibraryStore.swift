@@ -49,6 +49,33 @@ final class LibraryStore {
     var likedTracks: [Track] { tracks.filter { likedIDs.contains($0.id) } }
     var mostPlayed: [Track] { tracks.sorted { (playCounts[$0.id] ?? 0) > (playCounts[$1.id] ?? 0) } }
 
+    var duplicateGroups: [[Track]] {
+        Dictionary(grouping: tracks) { track in
+            let title = track.title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let artist = track.artist.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let durationBucket = Int(track.duration.rounded())
+            return "\(title)|\(artist)|\(durationBucket)"
+        }
+        .values
+        .filter { $0.count > 1 }
+        .map { $0.sorted { (playCounts[$0.id] ?? 0) > (playCounts[$1.id] ?? 0) } }
+        .sorted { ($0.first?.title ?? "") < ($1.first?.title ?? "") }
+    }
+
+    func removeDuplicateTracks() {
+        let duplicates = duplicateGroups.flatMap { Array($0.dropFirst()) }
+        guard !duplicates.isEmpty else { return }
+        let removedIDs = Set(duplicates.map(\.id))
+        tracks.removeAll { removedIDs.contains($0.id) }
+        likedIDs.subtract(removedIDs)
+        for id in removedIDs { playCounts.removeValue(forKey: id) }
+        for index in playlists.indices {
+            playlists[index].trackIDs.removeAll { removedIDs.contains($0) }
+        }
+        saveLibrary()
+        lastImportMessage = "Removed \(duplicates.count) duplicate song copies."
+    }
+
     func add(_ newTracks: [Track]) {
         let existing = Set(tracks.map { $0.url.standardizedFileURL.path })
         let additions = newTracks.filter { !existing.contains($0.url.standardizedFileURL.path) }
