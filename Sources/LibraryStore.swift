@@ -34,6 +34,7 @@ final class LibraryStore {
     var importErrors: [String] = []
 
     private let storageURL: URL
+    private var automaticBackupURL: URL { storageURL.deletingLastPathComponent().appendingPathComponent("music-library-autobackup.json") }
     @ObservationIgnored private var fetchingLyricsIDs: Set<UUID> = []
     private(set) var lyricsFetchStatus: [UUID: LyricsFetchStatus] = [:]
     @ObservationIgnored private var unsavedListeningSeconds: TimeInterval = 0
@@ -309,6 +310,7 @@ final class LibraryStore {
         let saved = SavedLibrary(tracks: tracks, likedIDs: likedIDs, playlists: playlists, playCounts: playCounts, listeningSeconds: listeningSeconds, dailyPlayCounts: dailyPlayCounts)
         guard let data = try? JSONEncoder().encode(saved) else { return }
         try? data.write(to: storageURL, options: .atomic)
+        try? data.write(to: automaticBackupURL, options: .atomic)
     }
 }
 
