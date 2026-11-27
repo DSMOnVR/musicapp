@@ -25,6 +25,7 @@ struct NowPlayingView: View {
                     Button("Sleep timer", systemImage: "moon.zzz") { showSleepTimer = true }
                     Button("Song credits", systemImage: "person.text.rectangle") { showCredits = true }
                     Button(engine.autoplayEnabled ? "Turn Autoplay Off" : "Turn Autoplay On", systemImage: "infinity") { engine.autoplayEnabled.toggle() }
+                    Button(engine.volumeNormalizationEnabled ? "Turn Volume Normalization Off" : "Turn Volume Normalization On", systemImage: "waveform.path") { engine.volumeNormalizationEnabled.toggle() }
                 } label: { Image(systemName: "ellipsis").font(.title3.bold()).foregroundStyle(.white).frame(width: 44, height: 44) }
             }.padding(.top, 8)
             Spacer(minLength: 18)
