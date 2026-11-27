@@ -219,7 +219,7 @@ struct TabBar: View {
                     }
                     .foregroundStyle(
                         selection == tab
-                        ? Color(red: 0.78, green: 1, blue: 0.2)
+                        ? Color(white: 0.72)
                         : Theme.muted
                     )
                     .frame(maxWidth: .infinity)
