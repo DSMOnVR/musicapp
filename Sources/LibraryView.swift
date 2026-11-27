@@ -63,6 +63,8 @@ struct LibraryView: View {
                             .contextMenu {
                                 Button(library.isLiked(track) ? "Unlike" : "Like", systemImage: "heart") { library.toggleLiked(track) }
                                 Button("Edit song details", systemImage: "pencil") { editingTrack = track }
+                                Button("Play next", systemImage: "text.line.first.and.arrowtriangle.forward") { engine.addToQueue(track, playNext: true) }
+                                Button("Add to queue", systemImage: "text.badge.plus") { engine.addToQueue(track) }
                                 Menu("Add to playlist", systemImage: "text.badge.plus") {
                                     ForEach(library.playlists) { playlist in
                                         Button(playlist.name) { library.add(track, to: playlist) }
