@@ -389,7 +389,7 @@ final class LibraryStore {
             throw NSError(domain: "DSMMusicBackup", code: 3, userInfo: [NSLocalizedDescriptionKey: "No audio files could be restored. Make sure you selected the complete DSM Music Backup folder."])
         }
 
-        let restoredIDs = Set(restoredTracks.map(\.id))
+        let restoredIDs = Set(restoredTracks.map { $0.id })
         let existingIDs = Set(tracks.map(\.id))
         let newTracks = restoredTracks.filter { !existingIDs.contains($0.id) }
         tracks.append(contentsOf: newTracks)
