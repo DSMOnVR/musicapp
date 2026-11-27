@@ -9,6 +9,7 @@ struct NowPlayingView: View {
     @State private var scrubTime: Double?
     @State private var showQueue = false
     @State private var showLyrics = false
+    @State private var showCredits = false
     @State private var showSleepTimer = false
     @State private var editingTrack: Track?
     private var shownTime: Double { scrubTime ?? engine.currentTime }
@@ -22,6 +23,7 @@ struct NowPlayingView: View {
                         Button("Edit song details", systemImage: "pencil") { editingTrack = track }
                     }
                     Button("Sleep timer", systemImage: "moon.zzz") { showSleepTimer = true }
+                    Button("Song credits", systemImage: "person.text.rectangle") { showCredits = true }
                     Button(engine.autoplayEnabled ? "Turn Autoplay Off" : "Turn Autoplay On", systemImage: "infinity") { engine.autoplayEnabled.toggle() }
                 } label: { Image(systemName: "ellipsis").font(.title3.bold()).foregroundStyle(.white).frame(width: 44, height: 44) }
             }.padding(.top, 8)
@@ -46,6 +48,11 @@ struct NowPlayingView: View {
         .animation(.easeInOut(duration: 0.55), value: engine.currentTrack?.id)
         .sheet(isPresented: $showQueue) { QueueSheet().environment(engine) }
         .sheet(isPresented: $showLyrics) { LyricsSheet().environment(engine).environment(library).presentationDetents([.large]) }
+        .sheet(isPresented: $showCredits) {
+            if let track = engine.currentTrack {
+                SongCreditsView(track: track).presentationDetents([.medium, .large])
+            }
+        }
         .sheet(item: $editingTrack) { track in TrackMetadataEditor(track: track).environment(library) }
         .confirmationDialog("Sleep timer", isPresented: $showSleepTimer, titleVisibility: .visible) {
             Button("15 minutes") { engine.setSleepTimer(minutes: 15) }
