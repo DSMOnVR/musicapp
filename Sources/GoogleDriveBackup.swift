@@ -212,8 +212,7 @@ final class GoogleDriveBackup {
             for (index, originalTrack) in payload.tracks.enumerated() {
                 guard let fileName = payload.audioFileNames[originalTrack.id.uuidString],
                       let remote = files.first(where: { $0.name == fileName }) else {
-                    status = "A backed-up audio file is missing for \(originalTrack.title)"
-                    continue
+                    throw Self.error("A backed-up audio file is missing for \(originalTrack.title). Your current library was left unchanged.")
                 }
                 let audioData = try await downloadFile(remote.id, accessToken: token)
                 var track = originalTrack
@@ -244,7 +243,9 @@ final class GoogleDriveBackup {
         let folder = try Self.restoreFolder()
         var restored: [Track] = []
         for var track in payload.tracks {
-            guard let audioData = payload.audioFiles[track.id.uuidString] else { continue }
+            guard let audioData = payload.audioFiles[track.id.uuidString] else {
+                throw Self.error("A backed-up audio file is missing for \(track.title). Your current library was left unchanged.")
+            }
             let ext = track.url.pathExtension.isEmpty ? "mp3" : track.url.pathExtension
             let destination = folder.appendingPathComponent("\(track.id.uuidString).\(ext)")
             try audioData.write(to: destination, options: .atomic)
