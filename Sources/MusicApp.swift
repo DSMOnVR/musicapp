@@ -89,7 +89,7 @@ struct RootView: View {
 
         .fileImporter(
             isPresented: $showImporter,
-            allowedContentTypes: [.audio, .mp3, .mpeg4Audio, .wav],
+            allowedContentTypes: [.item],
             allowsMultipleSelection: true
         ) { result in
             importResult(result)
