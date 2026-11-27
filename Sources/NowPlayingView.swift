@@ -125,3 +125,102 @@ struct QueueSheet: View {
     }
 }
 
+
+struct LyricsSheet: View {
+    @Environment(PlayerEngine.self) private var engine
+    @Environment(LibraryStore.self) private var library
+    @State private var showImporter = false
+    @State private var importError: String?
+
+    private var track: Track? { engine.currentTrack }
+    private var lyrics: String { track?.lyrics ?? "" }
+    private var timedLines: [TimedLyricLine] { LyricsParser.lines(from: lyrics) }
+    private var activeLineID: Int? {
+        timedLines.last(where: { $0.time <= engine.currentTime })?.id ?? timedLines.first?.id
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 16) {
+                if let track {
+                    Text(track.title).font(.title2.bold())
+                    Text(track.artist).foregroundStyle(Theme.muted)
+                    if !timedLines.isEmpty {
+                        ScrollViewReader { proxy in
+                            ScrollView {
+                                LazyVStack(alignment: .leading, spacing: 18) {
+                                    ForEach(timedLines) { line in
+                                        Text(line.text.isEmpty ? "♪" : line.text)
+                                            .font(.system(size: 22, weight: activeLineID == line.id ? .bold : .semibold))
+                                            .foregroundStyle(activeLineID == line.id ? ThemeAccent.color : .white.opacity(0.48))
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                            .id(line.id)
+                                    }
+                                }.padding(.vertical, 16)
+                            }
+                            .onAppear {
+                                if let activeLineID { proxy.scrollTo(activeLineID, anchor: .center) }
+                            }
+                            .onChange(of: activeLineID) { _, nextID in
+                                guard let nextID else { return }
+                                withAnimation(.easeInOut(duration: 0.25)) {
+                                    proxy.scrollTo(nextID, anchor: .center)
+                                }
+                            }
+                        }
+                    } else if lyrics.isEmpty {
+                        Spacer()
+                        ContentUnavailableView(
+                            "Finding lyrics…",
+                            systemImage: "quote.bubble",
+                            description: Text("DSM Music is checking Lyricsify. If lyrics are found, they’ll be saved for offline playback. You can also import an .lrc or .txt file.")
+                        )
+                        Spacer()
+                    } else {
+                        ScrollView {
+                            Text(lyrics).font(.system(size: 20, weight: .semibold))
+                                .lineSpacing(10).frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.vertical, 12)
+                        }
+                    }
+                    if let importError {
+                        Text(importError).font(.caption).foregroundStyle(.red)
+                    }
+                    Button { showImporter = true } label: {
+                        Label(lyrics.isEmpty ? "Import lyrics" : "Replace lyrics", systemImage: "doc.badge.plus")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent).tint(ThemeAccent.color)
+                } else {
+                    ContentUnavailableView("Nothing playing", systemImage: "music.note")
+                }
+            }
+            .padding(24).foregroundStyle(.white).background(Theme.bg.ignoresSafeArea())
+            .navigationTitle("Lyrics").navigationBarTitleDisplayMode(.inline)
+            .fileImporter(
+                isPresented: $showImporter,
+                allowedContentTypes: [.plainText, UTType(filenameExtension: "lrc") ?? .plainText],
+                allowsMultipleSelection: false
+            ) { result in
+                do {
+                    guard let url = try result.get().first, let track else { return }
+                    let access = url.startAccessingSecurityScopedResource()
+                    defer { if access { url.stopAccessingSecurityScopedResource() } }
+                    let data = try Data(contentsOf: url)
+                    guard let text = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .utf16) else {
+                        throw NSError(domain: "LyricsImport", code: 1, userInfo: [NSLocalizedDescriptionKey: "This lyrics file could not be read as text."])
+                    }
+                    guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                        throw NSError(domain: "LyricsImport", code: 2, userInfo: [NSLocalizedDescriptionKey: "The lyrics file is empty."])
+                    }
+                    library.updateLyrics(for: track, text: text)
+                    importError = nil
+                } catch { importError = error.localizedDescription }
+            }
+        }
+        .task(id: track?.id) {
+            if let track { library.fetchLyricsIfNeeded(for: track) }
+        }
+        .presentationDetents([.large])
+    }
+}
