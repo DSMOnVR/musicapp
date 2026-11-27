@@ -33,6 +33,7 @@ enum MainTab: String, CaseIterable {
 struct RootView: View {
     @Environment(PlayerEngine.self) private var engine
     @Environment(LibraryStore.self) private var library
+    @Environment(AppTheme.self) private var appTheme
 
     @State private var selectedTab: MainTab = .home
     @State private var showImporter = false
@@ -81,7 +82,16 @@ struct RootView: View {
         }
         .background(Theme.bg.ignoresSafeArea())
         .onChange(of: engine.currentTrack?.id) { _, _ in
-            if let track = engine.currentTrack { library.recordPlay(track) }
+            if let track = engine.currentTrack {
+                library.recordPlay(track)
+                appTheme.updateArtworkAccent(from: track.artworkData)
+            }
+        }
+        .onChange(of: appTheme.useArtworkColors) { _, enabled in
+            if enabled { appTheme.updateArtworkAccent(from: engine.currentTrack?.artworkData) }
+        }
+        .task {
+            appTheme.updateArtworkAccent(from: engine.currentTrack?.artworkData)
         }
         .onChange(of: Int(engine.currentTime)) { _, second in
             guard engine.isPlaying, second != lastStatsSecond else { return }
