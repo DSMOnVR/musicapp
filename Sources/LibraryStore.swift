@@ -8,6 +8,12 @@ struct MusicPlaylist: Identifiable, Codable, Hashable {
     var createdAt: Date = .now
 }
 
+enum LyricsFetchStatus: Equatable {
+    case searching
+    case notFound
+    case found
+}
+
 struct LibraryBackup: Codable {
     var tracks: [Track]
     var likedIDs: Set<UUID>
@@ -28,6 +34,7 @@ final class LibraryStore {
 
     private let storageURL: URL
     @ObservationIgnored private var fetchingLyricsIDs: Set<UUID> = []
+    private(set) var lyricsFetchStatus: [UUID: LyricsFetchStatus] = [:]
     @ObservationIgnored private var unsavedListeningSeconds: TimeInterval = 0
 
     init() {
@@ -57,19 +64,39 @@ final class LibraryStore {
     }
     func isLiked(_ track: Track) -> Bool { likedIDs.contains(track.id) }
 
+    func track(withID id: UUID) -> Track? {
+        tracks.first { $0.id == id }
+    }
+
+    func lyricsStatus(for track: Track) -> LyricsFetchStatus {
+        if !(track.lyrics ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return .found }
+        return lyricsFetchStatus[track.id] ?? .notFound
+    }
+
     func fetchLyricsIfNeeded(for track: Track) {
-        guard (track.lyrics ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              !fetchingLyricsIDs.contains(track.id) else { return }
+        guard (track(withID: track.id)?.lyrics ?? track.lyrics ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        guard !fetchingLyricsIDs.contains(track.id) else { return }
         fetchingLyricsIDs.insert(track.id)
+        lyricsFetchStatus[track.id] = .searching
         Task {
             defer { fetchingLyricsIDs.remove(track.id) }
-            guard let lyrics = await LyricsifyService.fetchLyrics(title: track.title, artist: track.artist) else { return }
+            guard let lyrics = await LyricsifyService.fetchLyrics(title: track.title, artist: track.artist) else {
+                lyricsFetchStatus[track.id] = .notFound
+                return
+            }
             updateLyrics(for: track, text: lyrics)
         }
     }
 
+    func retryLyrics(for track: Track) {
+        guard !fetchingLyricsIDs.contains(track.id) else { return }
+        lyricsFetchStatus[track.id] = .notFound
+        fetchLyricsIfNeeded(for: track)
+    }
+
     func updateLyrics(for track: Track, text: String) {
         updateTrack(track.id) { $0.lyrics = text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : text }
+        lyricsFetchStatus[track.id] = text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .notFound : .found
     }
 
     func updateMetadata(for track: Track, title: String, artist: String, album: String) {
