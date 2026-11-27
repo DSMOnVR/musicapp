@@ -7,13 +7,13 @@ targets:
     type: application
     platform: iOS
     sources: [Sources]
-    entitlements: Sources/MusicApp.entitlements
     dependencies:
       - target: MusicWidget
         embed: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.example.musicapp
+        CODE_SIGN_ENTITLEMENTS: Sources/MusicApp.entitlements
         SWIFT_VERSION: "5.0"
         TARGETED_DEVICE_FAMILY: "1"
     info:
@@ -30,10 +30,10 @@ targets:
     platform: iOS
     deploymentTarget: "17.0"
     sources: [Widget]
-    entitlements: Widget/Widget.entitlements
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.example.musicapp.widget
+        CODE_SIGN_ENTITLEMENTS: Widget/Widget.entitlements
         SWIFT_VERSION: "5.0"
         TARGETED_DEVICE_FAMILY: "1"
         INFOPLIST_KEY_NSExtension_NSExtensionPointIdentifier: com.apple.widgetkit-extension
