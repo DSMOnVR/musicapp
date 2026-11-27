@@ -142,10 +142,6 @@ struct LyricsSheet: View {
     private var activeLineID: Int? {
         timedLines.last(where: { $0.time <= engine.currentTime })?.id ?? timedLines.first?.id
     }
-    private var lrcType: UTType {
-        UTType(filenameExtension: "lrc", conformingTo: .text) ?? .plainText
-    }
-
     var body: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 16) {
@@ -153,27 +149,38 @@ struct LyricsSheet: View {
                     Text(track.title).font(.title2.bold())
                     Text(track.artist).foregroundStyle(Theme.muted)
 
-                    if !timedLines.isEmpty {
-                        ScrollViewReader { proxy in
-                            ScrollView {
-                                LazyVStack(alignment: .leading, spacing: 18) {
-                                    ForEach(timedLines) { line in
-                                        Text(line.text.isEmpty ? "♪" : line.text)
-                                            .font(.system(size: 22, weight: activeLineID == line.id ? .bold : .semibold))
-                                            .foregroundStyle(activeLineID == line.id ? ThemeAccent.color : .white.opacity(0.48))
-                                            .frame(maxWidth: .infinity, alignment: .leading)
-                                            .id(line.id)
-                                    }
-                                }.padding(.vertical, 16)
-                            }
-                            .onAppear {
-                                if let activeLineID { proxy.scrollTo(activeLineID, anchor: .center) }
-                            }
-                            .onChange(of: activeLineID) { _, nextID in
-                                guard let nextID else { return }
-                                withAnimation(.easeInOut(duration: 0.25)) {
-                                    proxy.scrollTo(nextID, anchor: .center)
+                    if !lyrics.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        if !timedLines.isEmpty {
+                            ScrollViewReader { proxy in
+                                ScrollView {
+                                    LazyVStack(alignment: .leading, spacing: 18) {
+                                        ForEach(timedLines) { line in
+                                            Text(line.text.isEmpty ? "♪" : line.text)
+                                                .font(.system(size: 22, weight: activeLineID == line.id ? .bold : .semibold))
+                                                .foregroundStyle(activeLineID == line.id ? ThemeAccent.color : .white.opacity(0.48))
+                                                .frame(maxWidth: .infinity, alignment: .leading)
+                                                .id(line.id)
+                                        }
+                                    }.padding(.vertical, 16)
                                 }
+                                .onAppear {
+                                    if let activeLineID { proxy.scrollTo(activeLineID, anchor: .center) }
+                                }
+                                .onChange(of: activeLineID) { _, nextID in
+                                    guard let nextID else { return }
+                                    withAnimation(.easeInOut(duration: 0.25)) {
+                                        proxy.scrollTo(nextID, anchor: .center)
+                                    }
+                                }
+                            }
+                        } else {
+                            ScrollView {
+                                Text(lyrics)
+                                    .font(.system(size: 19, weight: .medium))
+                                    .foregroundStyle(.white)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .textSelection(.enabled)
+                                    .padding(.vertical, 12)
                             }
                         }
                     } else {
@@ -228,7 +235,7 @@ struct LyricsSheet: View {
             .navigationTitle("Lyrics").navigationBarTitleDisplayMode(.inline)
             .fileImporter(
                 isPresented: $showFileImporter,
-                allowedContentTypes: [.plainText, .text, lrcType],
+                allowedContentTypes: [.item],
                 allowsMultipleSelection: false
             ) { result in
                 importSelectedFile(result)
@@ -249,7 +256,16 @@ struct LyricsSheet: View {
 
     private func importSelectedFile(_ result: Result<[URL], Error>) {
         do {
-            guard let url = try result.get().first, let track else { return }
+            let urls = try result.get()
+            guard let url = urls.first, let track else {
+                importError = "No lyrics file was selected."
+                return
+            }
+            let ext = url.pathExtension.lowercased()
+            guard ext == "lrc" || ext == "txt" else {
+                importError = "Please choose an .lrc or .txt lyrics file."
+                return
+            }
             let access = url.startAccessingSecurityScopedResource()
             defer { if access { url.stopAccessingSecurityScopedResource() } }
             let data = try Data(contentsOf: url)
@@ -290,7 +306,10 @@ struct LyricsSheet: View {
     }
 
     private func saveLyrics(_ data: Data, track: Track) {
-        guard let text = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .utf16),
+        let decoded = String(data: data, encoding: .utf8)
+            ?? String(data: data, encoding: .utf16)
+            ?? String(data: data, encoding: .isoLatin1)
+        guard let text = decoded,
               !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             importError = "That file is empty or isn't a readable text lyrics file."
             return
