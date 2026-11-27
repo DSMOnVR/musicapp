@@ -103,7 +103,7 @@ struct RootView: View {
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
-                cloudBackup.restorePreviousSignIn()
+                cloudBackup.restorePreviousSignIn(library)
                 Task { await cloudBackup.backupIfSignedIn(library) }
                 publishWidgetSnapshot()
             }
@@ -113,7 +113,7 @@ struct RootView: View {
         }
         .task {
             appTheme.updateArtworkAccent(from: engine.currentTrack?.artworkData)
-            cloudBackup.restorePreviousSignIn()
+            cloudBackup.restorePreviousSignIn(library)
             publishWidgetSnapshot()
         }
         .onChange(of: Int(engine.currentTime)) { _, second in
