@@ -56,10 +56,10 @@ final class AppTheme {
 
     func updateArtworkAccent(from data: Data?) {
         guard useArtworkColors, let data, let image = CIImage(data: data) else { return }
-        let filter = CIFilter.areaAverage()
-        filter.inputImage = image
-        filter.extent = image.extent
-        guard let output = filter.outputImage else { return }
+        let filter = CIFilter(name: "CIAreaAverage")
+        filter?.setValue(image, forKey: kCIInputImageKey)
+        filter?.setValue(CIVector(cgRect: image.extent), forKey: kCIInputExtentKey)
+        guard let output = filter?.outputImage else { return }
         var pixel = [UInt8](repeating: 0, count: 4)
         let context = CIContext(options: [.workingColorSpace: NSNull()])
         context.render(output, toBitmap: &pixel, rowBytes: 4,
