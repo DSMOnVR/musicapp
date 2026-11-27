@@ -38,7 +38,10 @@ struct NowPlayingView: View {
             }.buttonStyle(.plain).foregroundStyle(.white).padding(.top, 28)
             Spacer(minLength: 18)
         }
-        .padding(.horizontal, 24).foregroundStyle(.white).background(Theme.bg.ignoresSafeArea())
+        .padding(.horizontal, 24)
+        .foregroundStyle(.white)
+        .background(dynamicBackground)
+        .animation(.easeInOut(duration: 0.55), value: engine.currentTrack?.id)
         .sheet(isPresented: $showQueue) { QueueSheet().environment(engine) }
         .sheet(isPresented: $showLyrics) { LyricsSheet().environment(engine).environment(library).presentationDetents([.large]) }
         .sheet(item: $editingTrack) { track in TrackMetadataEditor(track: track).environment(library) }
@@ -50,44 +53,146 @@ struct NowPlayingView: View {
             Button("Cancel timer", role: .destructive) { engine.cancelSleepTimer() }
         }
     }
+    private var dynamicBackground: some View {
+        ZStack {
+            Theme.bg
+            if let data = engine.currentTrack?.artworkData, let image = UIImage(data: data) {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .blur(radius: 72)
+                    .overlay(Color.black.opacity(0.58))
+                    .transition(.opacity)
+            } else {
+                LinearGradient(colors: [appTheme.accent.opacity(0.24), Theme.bg, Theme.bg],
+                               startPoint: .topLeading, endPoint: .bottomTrailing)
+            }
+            LinearGradient(colors: [.black.opacity(0.18), .clear, .black.opacity(0.48)],
+                           startPoint: .top, endPoint: .bottom)
+        }
+        .ignoresSafeArea()
+    }
+
     private var artwork: some View {
         ArtworkView(track: engine.currentTrack ?? Track(title: "Your music", artist: "Offline player", album: "", url: URL(fileURLWithPath: "/"), duration: 0, artworkData: nil))
-            .aspectRatio(1, contentMode: .fit).clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
-            .background(RoundedRectangle(cornerRadius: 30).fill(appTheme.accent).offset(x: 9, y: 9))
+            .aspectRatio(1, contentMode: .fit)
+            .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 30, style: .continuous).stroke(.white.opacity(0.18), lineWidth: 1))
+            .shadow(color: .black.opacity(0.35), radius: 28, x: 0, y: 18)
+            .scaleEffect(engine.isPlaying ? 1 : 0.985)
+            .animation(.spring(response: 0.55, dampingFraction: 0.78), value: engine.isPlaying)
     }
     private var titleRow: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 5) {
-                Text(engine.currentTrack?.title ?? "Nothing playing").font(.system(size: 29, weight: .bold)).lineLimit(1)
-                Text(engine.currentTrack?.artist ?? "Import songs to get started").font(.system(size: 16)).foregroundStyle(Theme.muted)
+        HStack(spacing: 14) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(engine.currentTrack?.title ?? "Nothing playing")
+                    .font(.system(size: 27, weight: .bold, design: .rounded))
+                    .lineLimit(1)
+                    .contentTransition(.opacity)
+                Text(engine.currentTrack?.artist ?? "Import songs to get started")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.68))
+                    .lineLimit(1)
+                NowPlayingWaveform(isPlaying: engine.isPlaying, tint: appTheme.accent)
+                    .frame(width: 66, height: 17)
+                    .padding(.top, 4)
             }
-            Spacer()
+            Spacer(minLength: 8)
             if let track = engine.currentTrack {
-                Button { library.toggleLiked(track) } label: { Image(systemName: library.isLiked(track) ? "heart.fill" : "heart").font(.title2).foregroundStyle(library.isLiked(track) ? appTheme.accent : .white) }
+                Button { library.toggleLiked(track) } label: {
+                    Image(systemName: library.isLiked(track) ? "heart.fill" : "heart")
+                        .font(.title2.weight(.semibold))
+                        .foregroundStyle(library.isLiked(track) ? appTheme.accent : .white)
+                        .frame(width: 48, height: 48)
+                        .background(.ultraThinMaterial, in: Circle())
+                        .overlay(Circle().stroke(.white.opacity(0.14), lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+                .sensoryFeedback(.success, trigger: library.isLiked(track))
             }
         }
     }
     private var scrubber: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: 7) {
             GeometryReader { geo in
                 let progress = engine.duration > 0 ? min(max(shownTime / engine.duration, 0), 1) : 0
-                ZStack(alignment: .leading) { Capsule().fill(Color.white.opacity(0.15)); Capsule().fill(appTheme.accent).frame(width: geo.size.width * progress) }
-                    .frame(height: 8).frame(maxHeight: .infinity).contentShape(Rectangle())
-                    .gesture(DragGesture(minimumDistance: 0).onChanged { v in scrubTime = min(max(v.location.x / geo.size.width, 0), 1) * engine.duration }.onEnded { _ in if let t = scrubTime { engine.seek(to: t) }; scrubTime = nil })
-            }.frame(height: 24)
-            HStack { Text(format(shownTime)); Spacer(); Text("-" + format(max(engine.duration - shownTime, 0))) }.font(.caption).foregroundStyle(Theme.muted)
+                ZStack(alignment: .leading) {
+                    Capsule().fill(.white.opacity(0.20))
+                    Capsule().fill(LinearGradient(colors: [.white, appTheme.accent], startPoint: .leading, endPoint: .trailing))
+                        .frame(width: max(geo.size.width * progress, 0))
+                        .shadow(color: appTheme.accent.opacity(0.55), radius: 7)
+                }
+                .frame(height: 5)
+                .frame(maxHeight: .infinity)
+                .contentShape(Rectangle())
+                .gesture(DragGesture(minimumDistance: 0)
+                    .onChanged { v in scrubTime = min(max(v.location.x / geo.size.width, 0), 1) * engine.duration }
+                    .onEnded { _ in if let t = scrubTime { engine.seek(to: t) }; scrubTime = nil })
+            }
+            .frame(height: 22)
+            HStack {
+                Text(format(shownTime))
+                Spacer()
+                Text("-" + format(max(engine.duration - shownTime, 0)))
+            }
+            .font(.system(.caption, design: .rounded).monospacedDigit())
+            .foregroundStyle(.white.opacity(0.65))
         }
     }
     private var controls: some View {
-        HStack {
-            Button { engine.previous() } label: { Image(systemName: "backward.end.fill").font(.title2).frame(width: 56, height: 56) }
+        HStack(spacing: 0) {
+            Button { engine.previous() } label: {
+                Image(systemName: "backward.end.fill").font(.title2)
+                    .frame(width: 58, height: 58)
+                    .background(.ultraThinMaterial, in: Circle())
+                    .overlay(Circle().stroke(.white.opacity(0.12), lineWidth: 1))
+            }
             Spacer()
-            Button { engine.togglePlayPause() } label: { Image(systemName: engine.isPlaying ? "pause.fill" : "play.fill").font(.system(size: 31, weight: .bold)).foregroundStyle(.black).frame(width: 82, height: 82).background(appTheme.accent, in: RoundedRectangle(cornerRadius: 28, style: .continuous)) }
+            Button { engine.togglePlayPause() } label: {
+                Image(systemName: engine.isPlaying ? "pause.fill" : "play.fill")
+                    .font(.system(size: 29, weight: .bold))
+                    .foregroundStyle(.black)
+                    .contentTransition(.symbolEffect(.replace))
+                    .frame(width: 82, height: 82)
+                    .background(LinearGradient(colors: [.white, appTheme.accent], startPoint: .topLeading, endPoint: .bottomTrailing),
+                                in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+                    .shadow(color: appTheme.accent.opacity(0.28), radius: 18, x: 0, y: 8)
+            }
+            .sensoryFeedback(.impact(weight: .medium), trigger: engine.isPlaying)
             Spacer()
-            Button { engine.next() } label: { Image(systemName: "forward.end.fill").font(.title2).frame(width: 56, height: 56) }
-        }.buttonStyle(.plain).padding(.horizontal, 18)
+            Button { engine.next() } label: {
+                Image(systemName: "forward.end.fill").font(.title2)
+                    .frame(width: 58, height: 58)
+                    .background(.ultraThinMaterial, in: Circle())
+                    .overlay(Circle().stroke(.white.opacity(0.12), lineWidth: 1))
+            }
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 12)
     }
     private func format(_ t: TimeInterval) -> String { let s = Int(max(t, 0)); return String(format: "%d:%02d", s / 60, s % 60) }
+}
+
+private struct NowPlayingWaveform: View {
+    let isPlaying: Bool
+    let tint: Color
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 0.12, paused: !isPlaying)) { timeline in
+            let phase = timeline.date.timeIntervalSinceReferenceDate
+            HStack(alignment: .center, spacing: 2.5) {
+                ForEach(0..<13, id: \.self) { index in
+                    let movement = abs(sin(phase * 4.2 + Double(index) * 0.72))
+                    Capsule()
+                        .fill(tint.opacity(0.9))
+                        .frame(width: 3, height: isPlaying ? 4 + movement * 13 : 4 + Double(index % 3) * 1.5)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        }
+        .accessibilityLabel(isPlaying ? "Music playing" : "Music paused")
+    }
 }
 
 struct QueueSheet: View {
