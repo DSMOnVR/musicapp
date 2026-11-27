@@ -35,6 +35,7 @@ struct RootView: View {
     @Environment(PlayerEngine.self) private var engine
     @Environment(LibraryStore.self) private var library
     @Environment(AppTheme.self) private var appTheme
+    @Environment(\.scenePhase) private var scenePhase
 
     @State private var selectedTab: MainTab = .home
     @State private var showImporter = false
@@ -91,6 +92,11 @@ struct RootView: View {
         }
         .onChange(of: engine.isPlaying) { _, _ in
             publishWidgetSnapshot()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                publishWidgetSnapshot()
+            }
         }
         .onChange(of: appTheme.useArtworkColors) { _, enabled in
             if enabled { appTheme.updateArtworkAccent(from: engine.currentTrack?.artworkData) }
@@ -156,7 +162,9 @@ struct RootView: View {
         defaults?.set(engine.currentTrack?.title ?? "No song playing", forKey: "widget.track.title")
         defaults?.set(engine.currentTrack?.artist ?? "Open DSM Music to play", forKey: "widget.track.artist")
         defaults?.set(engine.isPlaying, forKey: "widget.track.isPlaying")
-        WidgetCenter.shared.reloadAllTimelines()
+        defaults?.set(Date().timeIntervalSince1970, forKey: "widget.lastUpdated")
+        defaults?.synchronize()
+        WidgetCenter.shared.reloadTimelines(ofKind: "DSMMusicWidget")
     }
 
     // MARK: - Folder importing
