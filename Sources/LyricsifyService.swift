@@ -31,17 +31,17 @@ enum LyricsifyService {
     }
 
     private static func slug(_ value: String) -> String {
-        let allowed = CharacterSet.alphanumerics
-        let folded = value.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
-        let words = folded.lowercased().split { !$0.unicodeScalars.allSatisfy { allowed.contains($0) } }
-        return words.map(String.init).joined(separator: "-")
+        let folded = value.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current).lowercased()
+        let cleaned = folded.filter { $0.isLetter || $0.isNumber || $0.isWhitespace || $0 == "-" }
+        return cleaned.split(whereSeparator: { $0.isWhitespace }).joined(separator: "-")
     }
 
     private static func fetchText(from url: URL) async throws -> String {
         var request = URLRequest(url: url)
         request.timeoutInterval = 12
         request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Mobile Safari/604.1", forHTTPHeaderField: "User-Agent")
-        request.setValue("text/html,text/plain,*/*", forHTTPHeaderField: "Accept")
+        request.setValue("text/html,application/xhtml+xml,application/xml;q=0.9,text/plain,*/*;q=0.8", forHTTPHeaderField: "Accept")
+        request.setValue("en-US,en;q=0.9", forHTTPHeaderField: "Accept-Language")
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode),
               let text = String(data: data, encoding: .utf8) else {
@@ -52,16 +52,23 @@ enum LyricsifyService {
 
     private static func extractLRC(from page: String) -> String? {
         if !page.contains("<") && looksLikeLRC(page) { return page }
-        if let entry = firstMatch(
-            in: page,
-            patterns: [
-                #"<div[^>]*id=["']entry["'][^>]*>(.*?)</div>"#,
-                #"<div[^>]*id=["']lyrics_[^"']*_details["'][^>]*>(.*?)</div>"#
-            ]
-        ) {
-            let decoded = decodeHTML(stripHTML(entry))
+
+        // Lyricsify places lyric text inside a div whose class includes "details".
+        let lyricContainers = [
+            #"<div[^>]*class=["'][^"']*\bdetails\b[^"']*["'][^>]*>(.*?)</div>"#,
+            #"details["']?\s*>(.*?)</div>"#,
+            #"<div[^>]*id=["']entry["'][^>]*>(.*?)</div>"#,
+            #"<div[^>]*id=["']lyrics_[^"']*_details["'][^>]*>(.*?)</div>"#
+        ]
+
+        for pattern in lyricContainers {
+            guard let html = firstMatch(in: page, patterns: [pattern]) else { continue }
+            let decoded = decodeHTML(stripHTML(html))
             if looksLikeLRC(decoded) { return decoded }
         }
+
+        let stripped = decodeHTML(stripHTML(page))
+        if looksLikeLRC(stripped) { return stripped }
         return nil
     }
 
