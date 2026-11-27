@@ -3,8 +3,23 @@ import Observation
 import GoogleSignIn
 import SwiftUI
 import UIKit
+import CryptoKit
 
-struct CloudLibraryPayload: Codable {
+/// Small manifest stored in Drive. Audio is uploaded separately so large libraries
+/// do not have to fit inside one JSON/multipart request.
+private struct CloudLibraryPayload: Codable {
+    var version: Int
+    var tracks: [Track]
+    var audioFileNames: [String: String]
+    var likedIDs: Set<UUID>
+    var playlists: [MusicPlaylist]
+    var playCounts: [UUID: Int]
+    var listeningSeconds: TimeInterval
+    var dailyPlayCounts: [String: Int]
+}
+
+/// Reads backups made by the first cloud-backup implementation.
+private struct LegacyCloudLibraryPayload: Codable {
     var version: Int
     var tracks: [Track]
     var audioFiles: [String: Data]
@@ -19,7 +34,8 @@ struct CloudLibraryPayload: Codable {
 @Observable
 final class GoogleDriveBackup {
     static let driveScope = "https://www.googleapis.com/auth/drive.appdata"
-    private let backupName = "DSM-Music-Backup.json"
+    private let backupName = "DSM-Music-Library.json"
+    private let audioPrefix = "DSM-Music-Audio-"
 
     private(set) var isSignedIn = false
     private(set) var accountEmail: String?
@@ -41,6 +57,21 @@ final class GoogleDriveBackup {
                 self.status = "Sign in required"
                 print("Google restore sign-in: \(error.localizedDescription)")
             }
+        }
+    }
+
+    /// Connects the Google account, then restores an existing cloud library if
+    /// this installation has no songs. Otherwise it uploads this device's library.
+    func connectAndSync(_ library: LibraryStore) async {
+        await signIn()
+        guard isSignedIn else { return }
+        if library.tracks.isEmpty {
+            await restoreFromDrive(library)
+            if library.tracks.isEmpty && status.hasPrefix("No DSM Music backup") {
+                await backupNow(library)
+            }
+        } else {
+            await backupNow(library)
         }
     }
 
@@ -73,7 +104,8 @@ final class GoogleDriveBackup {
     }
 
     func backupIfSignedIn(_ library: LibraryStore) async {
-        guard isSignedIn, !isWorking, Date().timeIntervalSince(lastAutomaticBackup) > 90 else { return }
+        guard isSignedIn, !isWorking,
+              Date().timeIntervalSince(lastAutomaticBackup) > 90 else { return }
         await backupNow(library)
     }
 
@@ -89,28 +121,53 @@ final class GoogleDriveBackup {
 
         do {
             let token = try await validAccessToken(for: user)
-            var audio: [String: Data] = [:]
-            for track in library.tracks {
+            let remoteFiles = try await listAppDataFiles(accessToken: token)
+            var namesByTrack: [String: String] = [:]
+            let encoder = JSONEncoder()
+
+            for (index, track) in library.tracks.enumerated() {
                 guard FileManager.default.fileExists(atPath: track.url.path) else {
-                    throw NSError(domain: "DSMMusicCloud", code: 1, userInfo: [NSLocalizedDescriptionKey: "Missing audio file: \(track.title)"])
+                    throw Self.error("Missing audio file: \(track.title)")
                 }
-                audio[track.id.uuidString] = try Data(contentsOf: track.url)
+                let fileName = audioPrefix + track.id.uuidString + "." +
+                    (track.url.pathExtension.isEmpty ? "audio" : track.url.pathExtension)
+                let audioData = try Data(contentsOf: track.url)
+                let checksum = Self.md5(audioData)
+                let existing = remoteFiles.first { $0.name == fileName }
+                if existing?.md5Checksum != checksum {
+                    try await uploadFile(
+                        audioData,
+                        name: fileName,
+                        mimeType: Self.mimeType(for: track.url),
+                        existingID: existing?.id,
+                        accessToken: token
+                    )
+                }
+                namesByTrack[track.id.uuidString] = fileName
+                status = "Backing up song \(index + 1) of \(library.tracks.count)…"
             }
 
             let payload = CloudLibraryPayload(
-                version: 1,
+                version: 2,
                 tracks: library.tracks,
-                audioFiles: audio,
+                audioFileNames: namesByTrack,
                 likedIDs: library.likedIDs,
                 playlists: library.playlists,
                 playCounts: library.playCounts,
                 listeningSeconds: library.listeningSeconds,
                 dailyPlayCounts: library.dailyPlayCounts
             )
-            let data = try JSONEncoder().encode(payload)
-            try await upload(data, accessToken: token)
+            let manifestData = try encoder.encode(payload)
+            let manifest = remoteFiles.first { $0.name == backupName }
+            try await uploadFile(
+                manifestData,
+                name: backupName,
+                mimeType: "application/json",
+                existingID: manifest?.id,
+                accessToken: token
+            )
             lastAutomaticBackup = Date()
-            status = "Backed up \(library.tracks.count) songs"
+            status = "Backed up \(library.tracks.count) songs to Google Drive"
         } catch {
             status = "Backup failed: \(error.localizedDescription)"
         }
@@ -128,34 +185,43 @@ final class GoogleDriveBackup {
 
         do {
             let token = try await validAccessToken(for: user)
-            let fileID = try await findBackupFile(accessToken: token)
-            guard let fileID else {
-                status = "No DSM Music backup found in this Google account"
+            let files = try await listAppDataFiles(accessToken: token)
+            guard let manifest = files.first(where: { $0.name == backupName }) else {
+                // Compatibility with the first version of the app's cloud backup.
+                guard let legacyManifest = files.first(where: { $0.name == "DSM-Music-Backup.json" }) else {
+                    status = "No DSM Music backup found in this Google account"
+                    return
+                }
+                let oldData = try await downloadFile(legacyManifest.id, accessToken: token)
+                let old = try JSONDecoder().decode(LegacyCloudLibraryPayload.self, from: oldData)
+                guard old.version == 1 else { throw Self.error("This backup version isn't supported.") }
+                let restored = try await restoreLegacy(old, library: library)
+                status = "Restored \(restored) songs"
                 return
             }
-            var request = URLRequest(url: URL(string: "https://www.googleapis.com/drive/v3/files/\(fileID)?alt=media")!)
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-            let (data, response) = try await URLSession.shared.data(for: request)
-            try Self.check(response, data: data)
-            let payload = try JSONDecoder().decode(CloudLibraryPayload.self, from: data)
-            guard payload.version == 1 else {
-                throw NSError(domain: "DSMMusicCloud", code: 2, userInfo: [NSLocalizedDescriptionKey: "This backup version isn't supported."])
-            }
 
-            let folder = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-                .appendingPathComponent("DSM Music", isDirectory: true)
-                .appendingPathComponent("Google Drive Restore", isDirectory: true)
-            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            let manifestData = try await downloadFile(manifest.id, accessToken: token)
+            let payload = try JSONDecoder().decode(CloudLibraryPayload.self, from: manifestData)
+            guard payload.version == 2 else { throw Self.error("This backup version isn't supported.") }
 
+            let restoreFolder = try Self.restoreFolder()
             var restored: [Track] = []
-            for var track in payload.tracks {
-                guard let audioData = payload.audioFiles[track.id.uuidString] else { continue }
-                let ext = track.url.pathExtension.isEmpty ? "mp3" : track.url.pathExtension
-                let destination = folder.appendingPathComponent("\(track.id.uuidString).\(ext)")
+            for (index, originalTrack) in payload.tracks.enumerated() {
+                guard let fileName = payload.audioFileNames[originalTrack.id.uuidString],
+                      let remote = files.first(where: { $0.name == fileName }) else {
+                    status = "A backed-up audio file is missing for \(originalTrack.title)"
+                    continue
+                }
+                let audioData = try await downloadFile(remote.id, accessToken: token)
+                var track = originalTrack
+                let ext = URL(fileURLWithPath: fileName).pathExtension
+                let destination = restoreFolder.appendingPathComponent("\(track.id.uuidString).\(ext.isEmpty ? "audio" : ext)")
                 try audioData.write(to: destination, options: .atomic)
                 track.url = destination
                 restored.append(track)
+                status = "Restoring song \(index + 1) of \(payload.tracks.count)…"
             }
+
             try library.restoreFromGoogleDrive(
                 tracks: restored,
                 likedIDs: payload.likedIDs,
@@ -164,10 +230,33 @@ final class GoogleDriveBackup {
                 listeningSeconds: payload.listeningSeconds,
                 dailyPlayCounts: payload.dailyPlayCounts
             )
-            status = "Restored \(restored.count) songs"
+            lastAutomaticBackup = Date()
+            status = "Restored \(restored.count) songs from Google Drive"
         } catch {
             status = "Restore failed: \(error.localizedDescription)"
         }
+    }
+
+    private func restoreLegacy(_ payload: LegacyCloudLibraryPayload, library: LibraryStore) async throws -> Int {
+        let folder = try Self.restoreFolder()
+        var restored: [Track] = []
+        for var track in payload.tracks {
+            guard let audioData = payload.audioFiles[track.id.uuidString] else { continue }
+            let ext = track.url.pathExtension.isEmpty ? "mp3" : track.url.pathExtension
+            let destination = folder.appendingPathComponent("\(track.id.uuidString).\(ext)")
+            try audioData.write(to: destination, options: .atomic)
+            track.url = destination
+            restored.append(track)
+        }
+        try library.restoreFromGoogleDrive(
+            tracks: restored,
+            likedIDs: payload.likedIDs,
+            playlists: payload.playlists,
+            playCounts: payload.playCounts,
+            listeningSeconds: payload.listeningSeconds,
+            dailyPlayCounts: payload.dailyPlayCounts
+        )
+        return restored.count
     }
 
     private func validAccessToken(for user: GIDGoogleUser) async throws -> String {
@@ -175,7 +264,7 @@ final class GoogleDriveBackup {
             user.refreshTokensIfNeeded { refreshedUser, error in
                 if let error { continuation.resume(throwing: error); return }
                 guard let refreshedUser else {
-                    continuation.resume(throwing: NSError(domain: "DSMMusicCloud", code: 3, userInfo: [NSLocalizedDescriptionKey: "Google couldn't refresh your sign-in."]))
+                    continuation.resume(throwing: Self.error("Google couldn't refresh your sign-in."))
                     return
                 }
                 self.user = refreshedUser
@@ -184,51 +273,100 @@ final class GoogleDriveBackup {
         }
     }
 
-    private func findBackupFile(accessToken: String) async throws -> String? {
+    private func listAppDataFiles(accessToken: String) async throws -> [DriveFile] {
         var components = URLComponents(string: "https://www.googleapis.com/drive/v3/files")!
         components.queryItems = [
             URLQueryItem(name: "spaces", value: "appDataFolder"),
-            URLQueryItem(name: "q", value: "name = '\(backupName)' and trashed = false"),
-            URLQueryItem(name: "fields", value: "files(id,name)")
+            URLQueryItem(name: "q", value: "'appDataFolder' in parents and trashed = false"),
+            URLQueryItem(name: "pageSize", value: "1000"),
+            URLQueryItem(name: "fields", value: "files(id,name,size,md5Checksum)")
         ]
         var request = URLRequest(url: components.url!)
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         let (data, response) = try await URLSession.shared.data(for: request)
         try Self.check(response, data: data)
-        let result = try JSONDecoder().decode(DriveFileList.self, from: data)
-        return result.files.first?.id
+        return try JSONDecoder().decode(DriveFileList.self, from: data).files
     }
 
-    private func upload(_ data: Data, accessToken: String) async throws {
-        let existingID = try await findBackupFile(accessToken: accessToken)
-        let boundary = "DSMBOUNDARY-\(UUID().uuidString)"
-        let metadata: [String: Any] = existingID == nil
-            ? ["name": backupName, "parents": ["appDataFolder"]]
-            : ["name": backupName]
-        let metadataData = try JSONSerialization.data(withJSONObject: metadata)
-        var body = Data()
-        body.append(Data("--\(boundary)\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n".utf8))
-        body.append(metadataData)
-        body.append(Data("\r\n--\(boundary)\r\nContent-Type: application/json\r\n\r\n".utf8))
-        body.append(data)
-        body.append(Data("\r\n--\(boundary)--".utf8))
-
-        let endpoint = existingID.map {
-            "https://www.googleapis.com/upload/drive/v3/files/\($0)?uploadType=multipart"
-        } ?? "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart"
-        var request = URLRequest(url: URL(string: endpoint)!)
-        request.httpMethod = existingID == nil ? "POST" : "PATCH"
-        request.httpBody = body
+    private func downloadFile(_ id: String, accessToken: String) async throws -> Data {
+        var request = URLRequest(url: URL(string: "https://www.googleapis.com/drive/v3/files/\(id)?alt=media")!)
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-        request.setValue("multipart/related; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        let (responseData, response) = try await URLSession.shared.data(for: request)
-        try Self.check(response, data: responseData)
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try Self.check(response, data: data)
+        return data
+    }
+
+    /// Uses Drive's resumable protocol so large audio files can upload reliably.
+    private func uploadFile(_ data: Data, name: String, mimeType: String, existingID: String?, accessToken: String) async throws {
+        let metadata: [String: Any] = existingID == nil
+            ? ["name": name, "parents": ["appDataFolder"]]
+            : ["name": name]
+        let metadataData = try JSONSerialization.data(withJSONObject: metadata)
+        let endpoint = existingID.map {
+            "https://www.googleapis.com/upload/drive/v3/files/\($0)?uploadType=resumable&fields=id,name"
+        } ?? "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,name"
+
+        var start = URLRequest(url: URL(string: endpoint)!)
+        start.httpMethod = existingID == nil ? "POST" : "PATCH"
+        start.httpBody = metadataData
+        start.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        start.setValue("application/json; charset=UTF-8", forHTTPHeaderField: "Content-Type")
+        start.setValue(mimeType, forHTTPHeaderField: "X-Upload-Content-Type")
+        start.setValue(String(data.count), forHTTPHeaderField: "X-Upload-Content-Length")
+
+        let (_, startResponse) = try await URLSession.shared.data(for: start)
+        guard let http = startResponse as? HTTPURLResponse,
+              (200...299).contains(http.statusCode),
+              let location = http.value(forHTTPHeaderField: "Location"),
+              let uploadURL = URL(string: location) else {
+            throw Self.responseError(startResponse, data: Data())
+        }
+
+        var upload = URLRequest(url: uploadURL)
+        upload.httpMethod = "PUT"
+        upload.httpBody = data
+        upload.setValue(mimeType, forHTTPHeaderField: "Content-Type")
+        let (result, response) = try await URLSession.shared.data(for: upload)
+        try Self.check(response, data: result)
+    }
+
+    private static func restoreFolder() throws -> URL {
+        let folder = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("DSM Music", isDirectory: true)
+            .appendingPathComponent("Google Drive Restore", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        return folder
+    }
+
+    private static func md5(_ data: Data) -> String {
+        Insecure.MD5.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }
+
+    private static func mimeType(for url: URL) -> String {
+        switch url.pathExtension.lowercased() {
+        case "mp3": return "audio/mpeg"
+        case "m4a", "mp4": return "audio/mp4"
+        case "aac": return "audio/aac"
+        case "wav": return "audio/wav"
+        case "aiff", "aif": return "audio/aiff"
+        case "flac": return "audio/flac"
+        case "ogg", "oga": return "audio/ogg"
+        default: return "application/octet-stream"
+        }
+    }
+
+    private static func error(_ message: String) -> NSError {
+        NSError(domain: "DSMMusicCloud", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
+    }
+
+    private static func responseError(_ response: URLResponse, data: Data) -> NSError {
+        let detail = String(data: data, encoding: .utf8) ?? "Google Drive upload failed"
+        return NSError(domain: "DSMMusicCloud", code: (response as? HTTPURLResponse)?.statusCode ?? -1, userInfo: [NSLocalizedDescriptionKey: detail])
     }
 
     private static func check(_ response: URLResponse, data: Data) throws {
         guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-            let detail = String(data: data, encoding: .utf8) ?? "Google Drive request failed"
-            throw NSError(domain: "DSMMusicCloud", code: (response as? HTTPURLResponse)?.statusCode ?? -1, userInfo: [NSLocalizedDescriptionKey: detail])
+            throw responseError(response, data: data)
         }
     }
 
@@ -242,10 +380,11 @@ final class GoogleDriveBackup {
 }
 
 private struct DriveFileList: Decodable {
-    struct File: Decodable { let id: String; let name: String }
-    let files: [File]
+    let files: [DriveFile]
 }
 
-extension Notification.Name {
-    static let dsmMusicLibraryDidChange = Notification.Name("dsmMusicLibraryDidChange")
+private struct DriveFile: Decodable {
+    let id: String
+    let name: String
+    let md5Checksum: String?
 }
