@@ -103,6 +103,30 @@ final class PlayerEngine {
         }
     }
 
+    /// Removes every upcoming track while keeping the current song playing.
+    func clearUpcoming() {
+        guard let currentIndex, queue.indices.contains(currentIndex) else {
+            queue.removeAll()
+            pause()
+            player.replaceCurrentItem(with: nil)
+            self.currentIndex = nil
+            currentTime = 0
+            duration = 0
+            return
+        }
+        queue = [queue[currentIndex]]
+        self.currentIndex = 0
+    }
+
+    /// Randomizes only upcoming tracks; the current song stays in place.
+    func shuffleUpcoming() {
+        guard let currentIndex, currentIndex + 1 < queue.count else { return }
+        let current = queue[currentIndex]
+        var upcoming = Array(queue.dropFirst(currentIndex + 1))
+        upcoming.shuffle()
+        queue = Array(queue.prefix(currentIndex)) + [current] + upcoming
+    }
+
     func setSleepTimer(minutes: Int) {
         sleepTask?.cancel()
         sleepTask = Task { [weak self] in
