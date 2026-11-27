@@ -9,7 +9,7 @@ struct LibraryBackupDocument: FileDocument {
         data = configuration.file.regularFileContents ?? Data()
     }
     func fileWrapper(configuration: WriteConfiguration) throws {
-        FileWrapper(regularFileWithContents: data)
+        return FileWrapper(regularFileWithContents: data)
     }
 }
 
