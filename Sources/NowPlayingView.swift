@@ -74,21 +74,23 @@ struct NowPlayingView: View {
     }
     private var dynamicBackground: some View {
         ZStack {
-            Theme.bg
-            if let data = engine.currentTrack?.artworkData, let image = UIImage(data: data) {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .blur(radius: 72)
-                    .overlay(Color.black.opacity(0.58))
-                    .transition(.opacity)
-            } else {
-                LinearGradient(colors: [appTheme.accent.opacity(0.24), Theme.bg, Theme.bg],
-                               startPoint: .topLeading, endPoint: .bottomTrailing)
+            switch backgroundStyle {
+            case "Midnight":
+                LinearGradient(colors: [Color.black, Color(red: 0.10, green: 0.12, blue: 0.20), .black], startPoint: .topLeading, endPoint: .bottomTrailing)
+            case "Purple gradient":
+                LinearGradient(colors: [.purple.opacity(0.65), .indigo, .black], startPoint: .topLeading, endPoint: .bottomTrailing)
+            case "Plain dark":
+                Color.black
+            default:
+                if let data = engine.currentTrack?.artworkData, let image = UIImage(data: data) {
+                    Image(uiImage: image).resizable().scaledToFill()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .blur(radius: 72).overlay(Color.black.opacity(0.58)).transition(.opacity)
+                } else {
+                    LinearGradient(colors: [appTheme.accent.opacity(0.24), Theme.bg, Theme.bg], startPoint: .topLeading, endPoint: .bottomTrailing)
+                }
             }
-            LinearGradient(colors: [.black.opacity(0.18), .clear, .black.opacity(0.48)],
-                           startPoint: .top, endPoint: .bottom)
+            LinearGradient(colors: [.black.opacity(0.18), .clear, .black.opacity(0.48)], startPoint: .top, endPoint: .bottom)
         }
         .ignoresSafeArea()
     }
