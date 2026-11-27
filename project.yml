@@ -16,6 +16,9 @@ targets:
         CODE_SIGN_ENTITLEMENTS: Sources/MusicApp.entitlements
         SWIFT_VERSION: "5.0"
         TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES: "DSMMono DSMBlue DSMPurple"
+        ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS: YES
     info:
       path: Sources/Info.plist
       properties:
@@ -24,23 +27,6 @@ targets:
         UILaunchScreen: {}
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
-        CFBundleIcons:
-          CFBundlePrimaryIcon:
-            CFBundleIconName: AppIcon
-          CFBundleAlternateIcons:
-            DSMMono:
-              CFBundleIconFiles: [DSMMono]
-              CFBundleIconName: DSMMono
-              UIPrerenderedIcon: true
-            DSMBlue:
-              CFBundleIconFiles: [DSMBlue]
-              CFBundleIconName: DSMBlue
-              UIPrerenderedIcon: true
-            DSMPurple:
-              CFBundleIconFiles: [DSMPurple]
-              CFBundleIconName: DSMPurple
-              UIPrerenderedIcon: true
-
   MusicWidget:
     type: app-extension
     platform: iOS
