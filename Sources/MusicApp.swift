@@ -87,44 +87,40 @@ struct RootView: View {
                 .presentationDragIndicator(.hidden)
         }
 
-        .fileImporter(
-            isPresented: $showImporter,
-            allowedContentTypes: [.item],
-            allowsMultipleSelection: true
-        ) { result in
-            importResult(result)
+        // Native iOS audio document picker
+        .sheet(isPresented: $showImporter) {
+            AudioDocumentPicker { result in
+                showImporter = false
+
+                switch result {
+                case .success(let urls):
+                    Task {
+                        await importURLs(urls)
+                    }
+
+                case .failure(let error):
+                    library.importErrors = [error.localizedDescription]
+                }
+            }
         }
 
+        // Folder picker
         .fileImporter(
             isPresented: $showFolderImporter,
             allowedContentTypes: [.folder],
             allowsMultipleSelection: false
         ) { result in
-            guard case .success(let urls) = result,
-                  let folder = urls.first else {
-                if case .failure(let error) = result {
-                    library.importErrors = [error.localizedDescription]
+            switch result {
+            case .success(let urls):
+                guard let folder = urls.first else { return }
+
+                Task {
+                    await importFolder(folder)
                 }
-                return
+
+            case .failure(let error):
+                library.importErrors = [error.localizedDescription]
             }
-
-            Task {
-                await importFolder(folder)
-            }
-        }
-    }
-
-    // MARK: - File selection
-
-    private func importResult(_ result: Result<[URL], Error>) {
-        switch result {
-        case .success(let urls):
-            Task {
-                await importURLs(urls)
-            }
-
-        case .failure(let error):
-            library.importErrors = [error.localizedDescription]
         }
     }
 
@@ -132,6 +128,7 @@ struct RootView: View {
 
     private func importFolder(_ folder: URL) async {
         let access = folder.startAccessingSecurityScopedResource()
+
         defer {
             if access {
                 folder.stopAccessingSecurityScopedResource()
