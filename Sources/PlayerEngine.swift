@@ -9,6 +9,13 @@ final class PlayerEngine {
     private(set) var currentIndex: Int?
     private(set) var isPlaying = false
     var autoplayEnabled = false
+    var volumeNormalizationEnabled = UserDefaults.standard.bool(forKey: "dsm.audio.normalization") {
+        didSet {
+            UserDefaults.standard.set(volumeNormalizationEnabled, forKey: "dsm.audio.normalization")
+            if volumeNormalizationEnabled, let track = currentTrack { applyNormalization(for: track) }
+            else { player.volume = 1 }
+        }
+    }
     private(set) var currentTime: TimeInterval = 0
     private(set) var duration: TimeInterval = 0
 
@@ -180,7 +187,9 @@ final class PlayerEngine {
         currentIndex = index
         let track = queue[index]
         let item = AVPlayerItem(url: track.url)
+        player.volume = 1
         player.replaceCurrentItem(with: item)
+        if volumeNormalizationEnabled { applyNormalization(for: track) }
         duration = track.duration
         currentTime = 0
 
@@ -191,6 +200,18 @@ final class PlayerEngine {
             MainActor.assumeIsolated { self?.next() }
         }
         updateNowPlaying()
+    }
+
+    private func applyNormalization(for track: Track) {
+        let trackID = track.id
+        let url = track.url
+        Task {
+            let gain = await Task.detached(priority: .utility) {
+                AudioLoudnessAnalyzer.playerGain(for: url)
+            }.value
+            guard volumeNormalizationEnabled, currentTrack?.id == trackID else { return }
+            player.volume = gain
+        }
     }
 
     private func configureRemoteCommands() {
