@@ -188,19 +188,19 @@ struct LyricsSheet: View {
                         switch library.lyricsStatus(for: track) {
                         case .searching:
                             ProgressView().tint(ThemeAccent.color)
-                            Text("Searching Lyricsify…").font(.headline)
+                            Text("Searching LRCLIB…").font(.headline)
                             Text("You can import a lyrics file or a folder while the search runs.")
                                 .font(.caption).foregroundStyle(Theme.muted)
                         case .notFound:
                             ContentUnavailableView(
                                 "Lyrics not found",
                                 systemImage: "quote.bubble",
-                                description: Text("Lyricsify didn't return lyrics for this song. Try again or import an .lrc or .txt file.")
+                                description: Text("No lyrics were found for this song. Try again or import an .lrc or .txt file.")
                             )
                             Button {
                                 library.retryLyrics(for: track)
                             } label: {
-                                Label("Try Lyricsify again", systemImage: "arrow.clockwise")
+                                Label("Search for lyrics again", systemImage: "arrow.clockwise")
                                     .frame(maxWidth: .infinity)
                             }
                             .buttonStyle(.bordered).tint(ThemeAccent.color)
@@ -233,12 +233,12 @@ struct LyricsSheet: View {
             }
             .padding(24).foregroundStyle(.white).background(Theme.bg.ignoresSafeArea())
             .navigationTitle("Lyrics").navigationBarTitleDisplayMode(.inline)
-            .fileImporter(
-                isPresented: $showFileImporter,
-                allowedContentTypes: [.item],
-                allowsMultipleSelection: false
-            ) { result in
-                importSelectedFile(result)
+            .sheet(isPresented: $showFileImporter) {
+                LyricsDocumentPicker { result in
+                    showFileImporter = false
+                    importSelectedFile(result)
+                }
+                .ignoresSafeArea()
             }
             .fileImporter(
                 isPresented: $showFolderImporter,
@@ -254,11 +254,11 @@ struct LyricsSheet: View {
         .presentationDetents([.large])
     }
 
-    private func importSelectedFile(_ result: Result<[URL], Error>) {
+    private func importSelectedFile(_ result: Result<URL, Error>) {
         do {
-            let urls = try result.get()
-            guard let url = urls.first, let track else {
-                importError = "No lyrics file was selected."
+            let url = try result.get()
+            guard let track else {
+                importError = "No song is currently selected."
                 return
             }
             let ext = url.pathExtension.lowercased()
@@ -266,10 +266,10 @@ struct LyricsSheet: View {
                 importError = "Please choose an .lrc or .txt lyrics file."
                 return
             }
-            let access = url.startAccessingSecurityScopedResource()
-            defer { if access { url.stopAccessingSecurityScopedResource() } }
             let data = try Data(contentsOf: url)
             saveLyrics(data, track: track)
+        } catch is CancellationError {
+            // The user closed the picker without selecting a file.
         } catch {
             importError = "Couldn't import that file: \(error.localizedDescription)"
         }
