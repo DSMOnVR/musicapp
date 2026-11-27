@@ -9,6 +9,7 @@ final class LibraryStore {
     var importErrors: [String] = []
 
     private let storageURL: URL
+    @ObservationIgnored private var fetchingLyricsIDs: Set<UUID> = []
 
     init() {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -29,12 +30,7 @@ final class LibraryStore {
         lastImportMessage = additions.isEmpty ? "These songs are already in your library." : "Added \(additions.count) song\(additions.count == 1 ? "" : "s")."
 
         // Look up missing lyrics in the background; successful results are stored locally.
-        for track in additions where (track.lyrics ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            Task {
-                guard let lyrics = await LyricsifyService.fetchLyrics(title: track.title, artist: track.artist) else { return }
-                updateLyrics(for: track, text: lyrics)
-            }
-        }
+        additions.forEach { fetchLyricsIfNeeded(for: $0) }
     }
 
     func toggleLiked(_ track: Track) {
@@ -43,6 +39,17 @@ final class LibraryStore {
     }
 
     func isLiked(_ track: Track) -> Bool { likedIDs.contains(track.id) }
+
+    func fetchLyricsIfNeeded(for track: Track) {
+        guard (track.lyrics ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              !fetchingLyricsIDs.contains(track.id) else { return }
+        fetchingLyricsIDs.insert(track.id)
+        Task {
+            defer { fetchingLyricsIDs.remove(track.id) }
+            guard let lyrics = await LyricsifyService.fetchLyrics(title: track.title, artist: track.artist) else { return }
+            updateLyrics(for: track, text: lyrics)
+        }
+    }
 
     func updateLyrics(for track: Track, text: String) {
         guard let index = tracks.firstIndex(where: { $0.id == track.id }) else { return }
