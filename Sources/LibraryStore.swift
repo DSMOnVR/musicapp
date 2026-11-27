@@ -86,6 +86,72 @@ final class LibraryStore {
         additions.forEach { fetchLyricsIfNeeded(for: $0) }
     }
 
+    func fixMissingMetadata() -> Int {
+        var fixed = 0
+        for index in tracks.indices {
+            let filename = tracks[index].url.deletingPathExtension().lastPathComponent
+            let titleMissing = tracks[index].title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                || tracks[index].title.localizedCaseInsensitiveContains("unknown")
+            let artistMissing = tracks[index].artist.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                || tracks[index].artist.localizedCaseInsensitiveContains("unknown")
+            guard titleMissing || artistMissing else { continue }
+
+            if let separator = filename.range(of: " - ") {
+                let fileArtist = String(filename[..<separator.lowerBound]).trimmingCharacters(in: .whitespaces)
+                let fileTitle = String(filename[separator.upperBound...]).trimmingCharacters(in: .whitespaces)
+                if titleMissing, !fileTitle.isEmpty { tracks[index].title = fileTitle }
+                if artistMissing, !fileArtist.isEmpty { tracks[index].artist = fileArtist }
+            } else if titleMissing, !filename.isEmpty {
+                tracks[index].title = filename
+            }
+            if tracks[index].album.localizedCaseInsensitiveContains("unknown") {
+                tracks[index].album = "Unknown Album"
+            }
+            fixed += 1
+        }
+        if fixed > 0 { saveLibrary() }
+        lastImportMessage = fixed == 0 ? "No missing metadata could be fixed from filenames." : "Updated metadata for \(fixed) songs."
+        return fixed
+    }
+
+    func organizeMusicFiles() -> Int {
+        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let root = documents.appendingPathComponent("DSM Music", isDirectory: true)
+        var moved = 0
+
+        func safeFolder(_ value: String) -> String {
+            let invalid = CharacterSet(charactersIn: "/\\\\:").union(.newlines)
+            let cleaned = value.components(separatedBy: invalid).joined(separator: "-")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return cleaned.isEmpty ? "Unknown" : cleaned
+        }
+
+        for index in tracks.indices {
+            let source = tracks[index].url
+            let folder = root
+                .appendingPathComponent(safeFolder(tracks[index].artist), isDirectory: true)
+                .appendingPathComponent(safeFolder(tracks[index].album), isDirectory: true)
+            let destinationFolder = folder
+            var destination = destinationFolder.appendingPathComponent(source.lastPathComponent)
+            if source.standardizedFileURL == destination.standardizedFileURL { continue }
+
+            do {
+                try FileManager.default.createDirectory(at: destinationFolder, withIntermediateDirectories: true)
+                if FileManager.default.fileExists(atPath: destination.path) {
+                    destination = destinationFolder.appendingPathComponent("\(source.deletingPathExtension().lastPathComponent)-\(UUID().uuidString.prefix(6)).\(source.pathExtension)")
+                }
+                try FileManager.default.moveItem(at: source, to: destination)
+                tracks[index].url = destination
+                moved += 1
+            } catch {
+                continue
+            }
+        }
+        if moved > 0 { saveLibrary() }
+        lastImportMessage = moved == 0 ? "Your music files are already organized." : "Organized \(moved) music files by artist and album."
+        return moved
+    }
+
     func toggleLiked(_ track: Track) {
         if likedIDs.contains(track.id) { likedIDs.remove(track.id) } else { likedIDs.insert(track.id) }
         saveLibrary()
