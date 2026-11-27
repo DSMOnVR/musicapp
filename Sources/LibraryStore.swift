@@ -66,7 +66,7 @@ final class LibraryStore {
             var referenceDuration: TimeInterval?
 
             for track in sorted {
-                if let referenceDuration, abs(track.duration - referenceDuration) > 5 {
+                if let baseline = referenceDuration, abs(track.duration - baseline) > 5 {
                     if group.count > 1 { matches.append(group) }
                     group = []
                     referenceDuration = nil
