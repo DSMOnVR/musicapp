@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ThemesView: View {
     @Environment(AppTheme.self) private var theme
+    @State private var iconMessage: String?
 
     var body: some View {
         @Bindable var theme = theme
@@ -59,6 +60,19 @@ struct ThemesView: View {
                 .padding(16)
                 .background(Theme.card, in: RoundedRectangle(cornerRadius: 20))
 
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("App icon").font(.headline)
+                    HStack(spacing: 12) {
+                        iconChoice("Default", name: nil, colors: [.black, Color(white: 0.38)])
+                        iconChoice("Mono", name: "DSMMono", colors: [Color(white: 0.78), Color(white: 0.22)])
+                        iconChoice("Blue", name: "DSMBlue", colors: [.cyan, .blue])
+                        iconChoice("Purple", name: "DSMPurple", colors: [.purple, .pink])
+                    }
+                    if let iconMessage { Text(iconMessage).font(.caption).foregroundStyle(Theme.muted) }
+                }
+                .padding(16)
+                .background(Theme.card, in: RoundedRectangle(cornerRadius: 20))
+
                 Toggle("Color from album artwork", isOn: $theme.useArtworkColors).tint(theme.accent)
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Appearance").font(.headline)
@@ -74,6 +88,28 @@ struct ThemesView: View {
         }
         .foregroundStyle(.white)
     }
+    private func iconChoice(_ title: String, name: String?, colors: [Color]) -> some View {
+        Button {
+            guard UIApplication.shared.supportsAlternateIcons else {
+                iconMessage = "Alternate icons are not available on this device."
+                return
+            }
+            UIApplication.shared.setAlternateIconName(name) { error in
+                iconMessage = error == nil ? "\(title) icon selected." : "Couldn't change the app icon: \(error!.localizedDescription)"
+            }
+        } label: {
+            VStack(spacing: 6) {
+                RoundedRectangle(cornerRadius: 13)
+                    .fill(LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing))
+                    .overlay(Image(systemName: "waveform").font(.title2.bold()).foregroundStyle(.white))
+                    .frame(width: 58, height: 58)
+                Text(title).font(.caption.weight(.medium))
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.plain)
+    }
+
 }
 
 struct MiniPlayer: View {
