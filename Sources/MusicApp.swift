@@ -148,6 +148,14 @@ struct RootView: View {
         }
     }
 
+    private func publishWidgetSnapshot() {
+        let defaults = UserDefaults(suiteName: "group.com.example.musicapp.shared")
+        defaults?.set(engine.currentTrack?.title ?? "No song playing", forKey: "widget.track.title")
+        defaults?.set(engine.currentTrack?.artist ?? "Open DSM Music to play", forKey: "widget.track.artist")
+        defaults?.set(engine.isPlaying, forKey: "widget.track.isPlaying")
+        WidgetCenter.shared.reloadAllTimelines()
+    }
+
     // MARK: - Folder importing
 
     private func importFolder(_ folder: URL) async {
