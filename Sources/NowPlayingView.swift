@@ -130,6 +130,7 @@ struct LyricsSheet: View {
     @Environment(PlayerEngine.self) private var engine
     @Environment(LibraryStore.self) private var library
     @Environment(AppTheme.self) private var appTheme
+    @State private var syncOffset: TimeInterval = 0
 
     private var track: Track? {
         guard let playing = engine.currentTrack else { return nil }
@@ -137,8 +138,9 @@ struct LyricsSheet: View {
     }
     private var lyrics: String { track?.lyrics ?? "" }
     private var timedLines: [TimedLyricLine] { LyricsParser.lines(from: lyrics) }
+    private var lyricTime: TimeInterval { max(0, engine.currentTime + syncOffset) }
     private var activeIndex: Int? {
-        timedLines.lastIndex(where: { $0.time <= engine.currentTime }) ?? (timedLines.isEmpty ? nil : 0)
+        timedLines.lastIndex(where: { $0.time <= lyricTime })
     }
     private var activeLineID: Int? {
         activeIndex.map { timedLines[$0].id }
@@ -148,44 +150,64 @@ struct LyricsSheet: View {
 
     private func highlightedLine(_ line: TimedLyricLine, index: Int) -> AttributedString {
         var result = AttributedString()
+        let isActiveLine = activeIndex == index
 
         if line.hasWordTiming {
-            let activeWordIndex = line.words.lastIndex(where: { $0.time <= engine.currentTime })
+            let activeWordIndex = isActiveLine ? line.words.lastIndex(where: { $0.time <= lyricTime }) : nil
             for (wordIndex, word) in line.words.enumerated() {
-                var part = AttributedString(word.text)
-                if let activeWordIndex, wordIndex < activeWordIndex {
-                    part.foregroundColor = .white
-                } else if wordIndex == activeWordIndex {
-                    part.foregroundColor = appTheme.accent
-                } else {
-                    part.foregroundColor = .white.opacity(0.34)
-                }
+                let cleanWord = word.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !cleanWord.isEmpty else { continue }
+                if !result.characters.isEmpty { result.append(AttributedString(" ")) }
+                var part = AttributedString(cleanWord)
+                part.foregroundColor = wordIndex == activeWordIndex
+                    ? appTheme.accent
+                    : .white.opacity(0.38)
                 result.append(part)
             }
             return result
         }
 
-        let words = line.text.split(separator: " ", omittingEmptySubsequences: false)
+        let words = line.text.split(whereSeparator: \.isWhitespace)
         let nextTime = index + 1 < timedLines.count ? timedLines[index + 1].time : line.time + 4.0
         let lineDuration = max(nextTime - line.time, 0.8)
-        let progress = min(max((engine.currentTime - line.time) / lineDuration, 0), 0.999)
-        let litWord = min(Int(progress * Double(max(words.count, 1))), max(words.count - 1, 0))
+        let progress = isActiveLine ? min(max((lyricTime - line.time) / lineDuration, 0), 0.999) : 0
+        let activeWord = isActiveLine && !words.isEmpty
+            ? min(Int(progress * Double(words.count)), words.count - 1)
+            : -1
 
         for (wordIndex, word) in words.enumerated() {
             var part = AttributedString(String(word))
-            if wordIndex < litWord {
-                part.foregroundColor = .white
-            } else if wordIndex == litWord {
-                part.foregroundColor = Color(white: 0.78)
-            } else {
-                part.foregroundColor = .white.opacity(0.34)
-            }
+            part.foregroundColor = wordIndex == activeWord
+                ? appTheme.accent
+                : .white.opacity(0.38)
             result.append(part)
-            if wordIndex < words.count - 1 {
-                result.append(AttributedString(" "))
-            }
+            if wordIndex < words.count - 1 { result.append(AttributedString(" ")) }
         }
         return result
+    }
+
+    private var syncControls: some View {
+        HStack(spacing: 12) {
+            Button { syncOffset = max(syncOffset - 0.25, -5) } label: {
+                Image(systemName: "minus").font(.caption.bold()).frame(width: 30, height: 30)
+                    .background(.white.opacity(0.10), in: Circle())
+            }
+            VStack(spacing: 2) {
+                Text("LYRIC SYNC").font(.caption2.weight(.bold)).tracking(1.2)
+                Text(String(format: "%+.2f sec", syncOffset)).font(.caption.monospacedDigit()).foregroundStyle(.white.opacity(0.75))
+            }
+            Button { syncOffset = min(syncOffset + 0.25, 5) } label: {
+                Image(systemName: "plus").font(.caption.bold()).frame(width: 30, height: 30)
+                    .background(.white.opacity(0.10), in: Circle())
+            }
+            Button("Reset") { syncOffset = 0 }.font(.caption.weight(.semibold))
+                .disabled(syncOffset == 0).opacity(syncOffset == 0 ? 0.35 : 1)
+        }
+        .buttonStyle(.plain).foregroundStyle(.white)
+        .padding(.horizontal, 16).padding(.vertical, 9)
+        .background(.ultraThinMaterial, in: Capsule())
+        .overlay(Capsule().stroke(.white.opacity(0.12), lineWidth: 1))
+        .padding(.bottom, 12)
     }
 
     var body: some View {
@@ -287,18 +309,15 @@ struct LyricsSheet: View {
                 }
             }
             .safeAreaInset(edge: .bottom) {
-                HStack(spacing: 10) {
-                    Image(systemName: "waveform")
-                    Text(hasWordSyncedLyrics ? "WORD-SYNCED LYRICS" : "SYNCED LYRICS")
-                        .font(.caption2.weight(.bold))
-                        .tracking(1.5)
+                VStack(spacing: 8) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "waveform")
+                        Text(hasWordSyncedLyrics ? "WORD-SYNCED LYRICS" : "ESTIMATED WORD TIMING")
+                            .font(.caption2.weight(.bold)).tracking(1.2)
+                    }
+                    .foregroundStyle(.white.opacity(0.68))
+                    syncControls
                 }
-                .foregroundStyle(.white.opacity(0.72))
-                .padding(.horizontal, 18)
-                .padding(.vertical, 12)
-                .background(.ultraThinMaterial, in: Capsule())
-                .overlay(Capsule().stroke(.white.opacity(0.12), lineWidth: 1))
-                .padding(.bottom, 14)
             }
             .navigationTitle("Lyrics")
             .navigationBarTitleDisplayMode(.inline)
