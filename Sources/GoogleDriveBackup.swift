@@ -45,7 +45,7 @@ final class GoogleDriveBackup {
     private var user: GIDGoogleUser?
     private var lastAutomaticBackup = Date.distantPast
 
-    func restorePreviousSignIn() {
+    func restorePreviousSignIn(_ library: LibraryStore? = nil) {
         GIDSignIn.sharedInstance.restorePreviousSignIn { [weak self] user, error in
             guard let self else { return }
             if let user {
@@ -53,6 +53,9 @@ final class GoogleDriveBackup {
                 self.isSignedIn = true
                 self.accountEmail = user.profile?.email
                 self.status = "Connected to Google Drive"
+                if let library, library.tracks.isEmpty {
+                    Task { await self.restoreFromDrive(library) }
+                }
             } else if let error {
                 self.status = "Sign in required"
                 print("Google restore sign-in: \(error.localizedDescription)")
