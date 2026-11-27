@@ -24,7 +24,15 @@ struct LibraryView: View {
                 Text("Library").font(.system(size: 34, weight: .bold))
                 Spacer()
                 Text("\(library.tracks.count) songs").font(.caption).foregroundStyle(Theme.muted)
-                Button { showTools = true } label: { Image(systemName: "chart.bar.xaxis").font(.title3).foregroundStyle(ThemeAccent.color).padding(.leading, 8) }
+                Button { showTools = true } label: {
+                    Label("Backup", systemImage: "icloud")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(ThemeAccent.color)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 7)
+                        .background(Theme.card, in: Capsule())
+                }
+                .accessibilityLabel("Open backup and library tools")
             }
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass").foregroundStyle(Theme.muted)
