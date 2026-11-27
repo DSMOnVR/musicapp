@@ -290,7 +290,7 @@ final class LibraryStore {
         unsavedListeningSeconds += seconds
         if unsavedListeningSeconds >= 15 {
             unsavedListeningSeconds = 0
-            saveLibrary()
+            saveLibrary(syncCloud: false)
         }
     }
 
@@ -449,11 +449,23 @@ final class LibraryStore {
         dailyPlayCounts = saved.dailyPlayCounts ?? [:]
     }
 
-    private func saveLibrary() {
+    func restoreFromGoogleDrive(tracks restoredTracks: [Track], likedIDs restoredLikes: Set<UUID>, playlists restoredPlaylists: [MusicPlaylist], playCounts restoredPlayCounts: [UUID: Int], listeningSeconds restoredListeningSeconds: TimeInterval, dailyPlayCounts restoredDailyCounts: [String: Int]) throws {
+        tracks = restoredTracks
+        let ids = Set(restoredTracks.map(\\.id))
+        likedIDs = restoredLikes.intersection(ids)
+        playlists = restoredPlaylists.map { playlist in var copy = playlist; copy.trackIDs = copy.trackIDs.filter { ids.contains($0) }; return copy }
+        playCounts = restoredPlayCounts.filter { ids.contains($0.key) }
+        listeningSeconds = restoredListeningSeconds
+        dailyPlayCounts = restoredDailyCounts
+        saveLibrary(syncCloud: false)
+    }
+
+    private func saveLibrary(syncCloud: Bool = true) {
         let saved = SavedLibrary(tracks: tracks, likedIDs: likedIDs, playlists: playlists, playCounts: playCounts, listeningSeconds: listeningSeconds, dailyPlayCounts: dailyPlayCounts)
         guard let data = try? JSONEncoder().encode(saved) else { return }
         try? data.write(to: storageURL, options: .atomic)
         try? data.write(to: automaticBackupURL, options: .atomic)
+        if syncCloud { NotificationCenter.default.post(name: .dsmMusicLibraryDidChange, object: nil) }
     }
 }
 
