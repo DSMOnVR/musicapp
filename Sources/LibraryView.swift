@@ -133,6 +133,10 @@ struct PlaylistDetailView: View {
     @Environment(\.dismiss) private var dismiss
     let playlist: MusicPlaylist
     private var songs: [Track] { library.tracks(in: playlist) }
+    private var playlistShareText: String {
+        let rows = songs.map { "\($0.title) — \($0.artist) [\($0.album)]" }
+        return (["DSM Music Playlist: \(playlist.name)", ""] + rows).joined(separator: "\n")
+    }
 
     var body: some View {
         NavigationStack {
@@ -152,7 +156,14 @@ struct PlaylistDetailView: View {
                 }
             }
             .navigationTitle(playlist.name)
-            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
+            .toolbar {
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    ShareLink(item: playlistShareText) {
+                        Image(systemName: "square.and.arrow.up")
+                    }
+                    Button("Done") { dismiss() }
+                }
+            }
         }
     }
 }
