@@ -43,7 +43,7 @@ final class GoogleDriveBackup {
     private(set) var isWorking = false
 
     private var user: GIDGoogleUser?
-    private var lastAutomaticBackup = Date.distantPast
+    private var backupRequestedWhileWorking = false
 
     func restorePreviousSignIn(_ library: LibraryStore? = nil) {
         GIDSignIn.sharedInstance.restorePreviousSignIn { [weak self] user, error in
@@ -107,8 +107,11 @@ final class GoogleDriveBackup {
     }
 
     func backupIfSignedIn(_ library: LibraryStore) async {
-        guard isSignedIn, !isWorking,
-              Date().timeIntervalSince(lastAutomaticBackup) > 90 else { return }
+        guard isSignedIn else { return }
+        if isWorking {
+            backupRequestedWhileWorking = true
+            return
+        }
         await backupNow(library)
     }
 
@@ -120,7 +123,13 @@ final class GoogleDriveBackup {
         guard !isWorking else { return }
         isWorking = true
         status = "Preparing your music backup…"
-        defer { isWorking = false }
+        defer {
+            isWorking = false
+            if backupRequestedWhileWorking {
+                backupRequestedWhileWorking = false
+                Task { await self.backupNow(library) }
+            }
+        }
 
         do {
             let token = try await validAccessToken(for: user)
@@ -169,7 +178,6 @@ final class GoogleDriveBackup {
                 existingID: manifest?.id,
                 accessToken: token
             )
-            lastAutomaticBackup = Date()
             status = "Backed up \(library.tracks.count) songs to Google Drive"
         } catch {
             status = "Backup failed: \(error.localizedDescription)"
@@ -232,7 +240,6 @@ final class GoogleDriveBackup {
                 listeningSeconds: payload.listeningSeconds,
                 dailyPlayCounts: payload.dailyPlayCounts
             )
-            lastAutomaticBackup = Date()
             status = "Restored \(restored.count) songs from Google Drive"
         } catch {
             status = "Restore failed: \(error.localizedDescription)"
