@@ -89,6 +89,9 @@ struct RootView: View {
             }
             publishWidgetSnapshot()
         }
+        .onChange(of: engine.isPlaying) { _, _ in
+            publishWidgetSnapshot()
+        }
         .onChange(of: appTheme.useArtworkColors) { _, enabled in
             if enabled { appTheme.updateArtworkAccent(from: engine.currentTrack?.artworkData) }
         }
