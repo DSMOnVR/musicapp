@@ -22,6 +22,17 @@ struct LibraryBackup: Codable {
     var listeningSeconds: TimeInterval
 }
 
+/// Portable backup manifest. Track URLs are relative paths inside the exported folder.
+struct PortableLibraryBackup: Codable {
+    var version: Int
+    var tracks: [Track]
+    var likedIDs: Set<UUID>
+    var playlists: [MusicPlaylist]
+    var playCounts: [UUID: Int]
+    var listeningSeconds: TimeInterval
+    var dailyPlayCounts: [String: Int]
+}
+
 @MainActor @Observable
 final class LibraryStore {
     private(set) var tracks: [Track] = []
@@ -292,6 +303,111 @@ final class LibraryStore {
 
     func makeBackupData() throws -> Data {
         try JSONEncoder.pretty.encode(LibraryBackup(tracks: tracks, likedIDs: likedIDs, playlists: playlists, playCounts: playCounts, listeningSeconds: listeningSeconds))
+    }
+
+    /// Creates a portable folder backup containing both the library database and every audio file.
+    func makeFullBackupFileWrapper() throws -> FileWrapper {
+        var portableTracks = tracks
+        var audioWrappers: [String: FileWrapper] = [:]
+        var missingFiles: [String] = []
+
+        for index in portableTracks.indices {
+            let source = portableTracks[index].url
+            guard FileManager.default.fileExists(atPath: source.path) else {
+                missingFiles.append(portableTracks[index].title)
+                continue
+            }
+            let ext = source.pathExtension.isEmpty ? "audio" : source.pathExtension
+            let filename = "\(portableTracks[index].id.uuidString).\(ext)"
+            let data = try Data(contentsOf: source)
+            audioWrappers[filename] = FileWrapper(regularFileWithContents: data)
+            portableTracks[index].url = URL(fileURLWithPath: "Audio/\(filename)")
+        }
+
+        if !missingFiles.isEmpty {
+            throw NSError(domain: "DSMMusicBackup", code: 1, userInfo: [
+                NSLocalizedDescriptionKey: "Some songs are missing from this device: \(missingFiles.prefix(5).joined(separator: ", "))."
+            ])
+        }
+
+        let manifest = PortableLibraryBackup(
+            version: 1,
+            tracks: portableTracks,
+            likedIDs: likedIDs,
+            playlists: playlists,
+            playCounts: playCounts,
+            listeningSeconds: listeningSeconds,
+            dailyPlayCounts: dailyPlayCounts
+        )
+        let manifestData = try JSONEncoder.pretty.encode(manifest)
+        let children: [String: FileWrapper] = [
+            "Library.json": FileWrapper(regularFileWithContents: manifestData),
+            "Audio": FileWrapper(directoryWithFileWrappers: audioWrappers)
+        ]
+        let root = FileWrapper(directoryWithFileWrappers: children)
+        root.preferredFilename = "DSM Music Backup"
+        return root
+    }
+
+    /// Restores a portable backup folder and copies its audio into this installation's Documents folder.
+    func restoreFullBackup(from folderURL: URL) throws {
+        let manifestURL = folderURL.appendingPathComponent("Library.json")
+        let manifestData = try Data(contentsOf: manifestURL)
+        let backup = try JSONDecoder().decode(PortableLibraryBackup.self, from: manifestData)
+        guard backup.version == 1 else {
+            throw NSError(domain: "DSMMusicBackup", code: 2, userInfo: [NSLocalizedDescriptionKey: "This backup version isn't supported."])
+        }
+
+        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let restoredFolder = documents.appendingPathComponent("DSM Music", isDirectory: true)
+            .appendingPathComponent("Restored", isDirectory: true)
+        try FileManager.default.createDirectory(at: restoredFolder, withIntermediateDirectories: true)
+
+        var restoredTracks: [Track] = []
+        for var track in backup.tracks {
+            let relative = track.url.path
+            let components = relative.split(separator: "/")
+            guard components.count == 2, components[0] == "Audio" else { continue }
+            let source = folderURL.appendingPathComponent("Audio", isDirectory: true)
+                .appendingPathComponent(String(components[1]))
+            guard FileManager.default.fileExists(atPath: source.path) else { continue }
+
+            var destination = restoredFolder.appendingPathComponent(source.lastPathComponent)
+            if FileManager.default.fileExists(atPath: destination.path) {
+                let base = destination.deletingPathExtension().lastPathComponent
+                destination = restoredFolder.appendingPathComponent("\(base)-\(UUID().uuidString.prefix(6)).\(destination.pathExtension)")
+            }
+            try FileManager.default.copyItem(at: source, to: destination)
+            track.url = destination
+            restoredTracks.append(track)
+        }
+
+        guard !restoredTracks.isEmpty || backup.tracks.isEmpty else {
+            throw NSError(domain: "DSMMusicBackup", code: 3, userInfo: [NSLocalizedDescriptionKey: "No audio files could be restored. Make sure you selected the complete DSM Music Backup folder."])
+        }
+
+        let restoredIDs = Set(restoredTracks.map(\.id))
+        let existingIDs = Set(tracks.map(\.id))
+        let newTracks = restoredTracks.filter { !existingIDs.contains($0.id) }
+        tracks.append(contentsOf: newTracks)
+        let allIDs = Set(tracks.map(\.id))
+        likedIDs.formUnion(backup.likedIDs.intersection(allIDs))
+        for playlist in backup.playlists {
+            if !playlists.contains(where: { $0.id == playlist.id }) {
+                var copy = playlist
+                copy.trackIDs = copy.trackIDs.filter { allIDs.contains($0) }
+                playlists.append(copy)
+            }
+        }
+        for (id, count) in backup.playCounts where restoredIDs.contains(id) {
+            playCounts[id] = max(playCounts[id, default: 0], count)
+        }
+        listeningSeconds = max(listeningSeconds, backup.listeningSeconds)
+        for (day, count) in backup.dailyPlayCounts {
+            dailyPlayCounts[day] = max(dailyPlayCounts[day, default: 0], count)
+        }
+        saveLibrary()
+        lastImportMessage = "Restored \(restoredTracks.count) songs from your full backup."
     }
 
     func restoreBackup(from data: Data) throws {
