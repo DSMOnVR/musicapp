@@ -14,6 +14,7 @@ struct ListeningStatsView: View {
             return (date.formatted(.dateTime.weekday(.abbreviated)), library.dailyPlayCounts[key, default: 0])
         }
     }
+    private var maxDailyPlays: Int { max(lastSevenDays.map { $0.1 }.max() ?? 1, 1) }
     private var topTracks: [Track] {
         library.mostPlayed.filter { library.playCounts[$0.id, default: 0] > 0 }.prefix(5).map { $0 }
     }
@@ -30,13 +31,14 @@ struct ListeningStatsView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Plays this week").font(.headline)
                         HStack(alignment: .bottom, spacing: 10) {
-                            ForEach(Array(lastSevenDays.enumerated()), id: \.offset) { _, day in
+                            ForEach(0..<lastSevenDays.count, id: \.self) { index in
+                                let day = lastSevenDays[index]
                                 VStack(spacing: 7) {
                                     Text("\(day.1)").font(.caption2).foregroundStyle(Theme.muted)
                                     RoundedRectangle(cornerRadius: 6)
                                         .fill(ThemeAccent.color.opacity(0.85))
                                         .frame(maxWidth: .infinity)
-                                        .frame(height: CGFloat(max(day.1, 1)) / CGFloat(max(lastSevenDays.map(\.1).max() ?? 1, 1)) * 90)
+                                        .frame(height: CGFloat(max(day.1, 1)) / CGFloat(maxDailyPlays) * 90)
                                     Text(day.0).font(.caption2).foregroundStyle(Theme.muted)
                                 }
                                 .frame(maxHeight: .infinity, alignment: .bottom)
