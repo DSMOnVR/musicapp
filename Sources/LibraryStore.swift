@@ -74,7 +74,7 @@ final class LibraryStore {
     }
 
     func fetchLyricsIfNeeded(for track: Track) {
-        guard (track(withID: track.id)?.lyrics ?? track.lyrics ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        guard (self.track(withID: track.id)?.lyrics ?? track.lyrics ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         guard !fetchingLyricsIDs.contains(track.id) else { return }
         fetchingLyricsIDs.insert(track.id)
         lyricsFetchStatus[track.id] = .searching
