@@ -307,6 +307,22 @@ struct LyricsSheet: View {
     @Environment(PlayerEngine.self) private var engine
     @Environment(LibraryStore.self) private var library
     @Environment(AppTheme.self) private var appTheme
+    @State private var translationTarget = "es"
+    @State private var translatedLyrics: String?
+    @State private var isTranslating = false
+    @State private var translationError: String?
+
+    private func translateCurrentLyrics() async {
+        guard !lyrics.isEmpty else { return }
+        isTranslating = true
+        translationError = nil
+        defer { isTranslating = false }
+        do {
+            translatedLyrics = try await LyricsTranslationService.translate(lyrics, targetLanguage: translationTarget)
+        } catch {
+            translationError = "Translation needs an internet connection. Please try again."
+        }
+    }
 
     private var track: Track? {
         guard let playing = engine.currentTrack else { return nil }
@@ -367,7 +383,44 @@ struct LyricsSheet: View {
                         }
                         .padding(.horizontal, 22)
                         .padding(.top, 12)
-                        .padding(.bottom, 20)
+                        .padding(.bottom, 12)
+
+                        HStack(spacing: 10) {
+                            Picker("Translate to", selection: $translationTarget) {
+                                Text("Spanish").tag("es")
+                                Text("French").tag("fr")
+                                Text("Portuguese").tag("pt")
+                                Text("Japanese").tag("ja")
+                                Text("Korean").tag("ko")
+                            }
+                            .pickerStyle(.menu)
+                            .tint(appTheme.accent)
+                            Button {
+                                Task { await translateCurrentLyrics() }
+                            } label: {
+                                if isTranslating { ProgressView().tint(appTheme.accent) }
+                                else { Label("Translate", systemImage: "translate").font(.subheadline.bold()) }
+                            }
+                            .disabled(isTranslating || lyrics.isEmpty)
+                            Spacer()
+                        }
+                        .padding(.horizontal, 22)
+                        .padding(.bottom, 10)
+
+                        if let translationError {
+                            Text(translationError).font(.caption).foregroundStyle(Theme.muted).padding(.horizontal, 22)
+                        }
+                        if let translatedLyrics {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("TRANSLATED LYRICS").font(.caption.bold()).tracking(1.2).foregroundStyle(appTheme.accent)
+                                Text(translatedLyrics).font(.system(size: 18, weight: .medium)).foregroundStyle(.white).textSelection(.enabled)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(16)
+                            .background(Theme.card, in: RoundedRectangle(cornerRadius: 16))
+                            .padding(.horizontal, 22)
+                            .padding(.bottom, 12)
+                        }
 
                         if !lyrics.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                             if !timedLines.isEmpty {
