@@ -44,6 +44,22 @@ struct PersonalLibraryToolsView: View {
                         LabeledContent("Most played", value: "\(top.title) · \(library.playCounts[top.id] ?? 0) plays")
                     }
                 }
+                Section("Automatic library tools") {
+                    Button {
+                        let count = library.fixMissingMetadata()
+                        errorMessage = count == 0 ? "No filename-based metadata fixes were available." : "Fixed metadata for \(count) songs."
+                    } label: {
+                        Label("Fix missing song details", systemImage: "wand.and.stars")
+                    }
+                    Button {
+                        let count = library.organizeMusicFiles()
+                        errorMessage = count == 0 ? "No files needed moving." : "Organized \(count) files into artist and album folders."
+                    } label: {
+                        Label("Organize files by artist and album", systemImage: "folder.badge.gearshape")
+                    }
+                    Text("Metadata repair uses the imported filename (Artist - Title). Organization moves copied music files into DSM Music/Artist/Album folders.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
                 Section("Duplicate finder") {
                     if library.duplicateGroups.isEmpty {
                         Label("No duplicate songs found", systemImage: "checkmark.circle")
