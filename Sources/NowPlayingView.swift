@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct NowPlayingView: View {
     @Environment(PlayerEngine.self) private var engine
@@ -33,7 +34,7 @@ struct NowPlayingView: View {
         }
         .padding(.horizontal, 24).foregroundStyle(.white).background(Theme.bg.ignoresSafeArea())
         .sheet(isPresented: $showQueue) { QueueSheet().environment(engine) }
-        .sheet(isPresented: $showLyrics) { LyricsSheet().environment(engine) }
+        .sheet(isPresented: $showLyrics) { LyricsSheet().environment(engine).environment(library) }
         .confirmationDialog("Sleep timer", isPresented: $showSleepTimer, titleVisibility: .visible) {
             Button("15 minutes") { engine.setSleepTimer(minutes: 15) }
             Button("30 minutes") { engine.setSleepTimer(minutes: 30) }
@@ -92,13 +93,80 @@ struct QueueSheet: View {
 
 struct LyricsSheet: View {
     @Environment(PlayerEngine.self) private var engine
+    @Environment(LibraryStore.self) private var library
+    @State private var showImporter = false
+    @State private var importError: String?
+
+    private var track: Track? { engine.currentTrack }
+    private var lyrics: String { track?.lyrics ?? "" }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack { Text(engine.currentTrack?.title ?? "Lyrics").font(.title2.bold()); Spacer(); Image(systemName: "quote.bubble.fill").foregroundStyle(ThemeAccent.color) }
-            Text(engine.currentTrack?.artist ?? "").foregroundStyle(Theme.muted)
-            Spacer()
-            Text("Lyrics aren't embedded in this file or available offline yet.").font(.title3.bold()).foregroundStyle(Theme.muted).multilineTextAlignment(.center).frame(maxWidth: .infinity)
-            Spacer()
-        }.padding(24).foregroundStyle(.white).background(Theme.bg.ignoresSafeArea()).presentationDetents([.medium, .large])
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 16) {
+                if let track {
+                    Text(track.title).font(.title2.bold())
+                    Text(track.artist).foregroundStyle(Theme.muted)
+                    if lyrics.isEmpty {
+                        Spacer()
+                        ContentUnavailableView(
+                            "No lyrics saved",
+                            systemImage: "quote.bubble",
+                            description: Text("This song has no embedded lyrics. Import a .txt or .lrc lyrics file to keep them available offline.")
+                        )
+                        Spacer()
+                    } else {
+                        ScrollView {
+                            Text(lyrics)
+                                .font(.system(size: 20, weight: .semibold))
+                                .lineSpacing(10)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.vertical, 12)
+                        }
+                    }
+                    if let importError {
+                        Text(importError).font(.caption).foregroundStyle(.red)
+                    }
+                    Button {
+                        showImporter = true
+                    } label: {
+                        Label(lyrics.isEmpty ? "Import lyrics" : "Replace lyrics", systemImage: "doc.badge.plus")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(ThemeAccent.color)
+                } else {
+                    ContentUnavailableView("Nothing playing", systemImage: "music.note")
+                }
+            }
+            .padding(24)
+            .foregroundStyle(.white)
+            .background(Theme.bg.ignoresSafeArea())
+            .navigationTitle("Lyrics")
+            .navigationBarTitleDisplayMode(.inline)
+            .fileImporter(
+                isPresented: $showImporter,
+                allowedContentTypes: [.plainText, UTType(filenameExtension: "lrc") ?? .plainText],
+                allowsMultipleSelection: false
+            ) { result in
+                do {
+                    guard let url = try result.get().first, let track else { return }
+                    let access = url.startAccessingSecurityScopedResource()
+                    defer { if access { url.stopAccessingSecurityScopedResource() } }
+                    let data = try Data(contentsOf: url)
+                    guard let text = String(data: data, encoding: .utf8)
+                        ?? String(data: data, encoding: .utf16) else {
+                        throw NSError(domain: "LyricsImport", code: 1, userInfo: [NSLocalizedDescriptionKey: "This lyrics file could not be read as text."])
+                    }
+                    guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                        throw NSError(domain: "LyricsImport", code: 2, userInfo: [NSLocalizedDescriptionKey: "The lyrics file is empty."])
+                    }
+                    library.updateLyrics(for: track, text: text)
+                    importError = nil
+                } catch {
+                    importError = error.localizedDescription
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
     }
 }
