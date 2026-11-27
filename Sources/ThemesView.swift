@@ -1,8 +1,10 @@
 import SwiftUI
+import WidgetKit
 
 struct ThemesView: View {
     @Environment(AppTheme.self) private var theme
     @State private var iconMessage: String?
+    @AppStorage("widget.style", store: UserDefaults(suiteName: "group.com.example.musicapp.shared")) private var widgetStyle = "Midnight"
 
     var body: some View {
         @Bindable var theme = theme
@@ -72,6 +74,23 @@ struct ThemesView: View {
                 }
                 .padding(16)
                 .background(Theme.card, in: RoundedRectangle(cornerRadius: 20))
+
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Home & Lock Screen widgets").font(.headline)
+                    Picker("Widget appearance", selection: $widgetStyle) {
+                        Text("Midnight").tag("Midnight")
+                        Text("Ocean").tag("Ocean")
+                        Text("Violet").tag("Violet")
+                        Text("Rose").tag("Rose")
+                        Text("Gold").tag("Gold")
+                    }
+                    .pickerStyle(.menu)
+                    Text("Add DSM Music to your Home Screen or Lock Screen, then choose a widget size. Changes refresh the widget.")
+                        .font(.caption).foregroundStyle(Theme.muted)
+                }
+                .padding(16)
+                .background(Theme.card, in: RoundedRectangle(cornerRadius: 20))
+                .onChange(of: widgetStyle) { _, _ in WidgetCenter.shared.reloadAllTimelines() }
 
                 Toggle("Color from album artwork", isOn: $theme.useArtworkColors).tint(theme.accent)
                 VStack(alignment: .leading, spacing: 10) {
