@@ -27,6 +27,14 @@ final class LibraryStore {
         tracks.append(contentsOf: additions)
         saveLibrary()
         lastImportMessage = additions.isEmpty ? "These songs are already in your library." : "Added \(additions.count) song\(additions.count == 1 ? "" : "s")."
+
+        // Look up missing lyrics in the background; successful results are stored locally.
+        for track in additions where (track.lyrics ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            Task {
+                guard let lyrics = await LyricsifyService.fetchLyrics(title: track.title, artist: track.artist) else { return }
+                updateLyrics(for: track, text: lyrics)
+            }
+        }
     }
 
     func toggleLiked(_ track: Track) {
