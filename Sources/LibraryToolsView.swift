@@ -101,6 +101,9 @@ struct PersonalLibraryToolsView: View {
                     }
                 }
                 Section("Backup & restore") {
+                    Label("Automatic local backup is enabled", systemImage: "checkmark.icloud")
+                    Text("DSM Music keeps a second copy of your library database in its private app storage whenever your library is saved. This backup does not include the audio files.")
+                        .font(.caption).foregroundStyle(.secondary)
                     Button { prepareBackup() } label: {
                         Label("Export library backup", systemImage: "square.and.arrow.up")
                     }
