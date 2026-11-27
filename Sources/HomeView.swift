@@ -100,7 +100,7 @@ struct HomeView: View {
     private func play(_ track: Track) { engine.setQueue(library.tracks, startAt: library.tracks.firstIndex(of: track) ?? 0); onOpenPlayer() }
 }
 
-struct ThemeAccent { static let color = Color(red: 0.78, green: 1, blue: 0.2) }
+struct ThemeAccent { static let color = Color(white: 0.72) }
 
 struct ArtworkView: View {
     var track: Track
